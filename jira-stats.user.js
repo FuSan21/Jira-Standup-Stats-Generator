@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         JIRA Weekly Stats
+// @name         JIRA Stats
 // @namespace    https://www.fusan.live
 // @version      0.1
-// @description  Show weekly JIRA statistics
+// @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -67,7 +67,7 @@
     `;
 
     const title = document.createElement("span");
-    title.textContent = "Weekly Statistics";
+    title.textContent = "Statistics";
     title.style.fontWeight = "bold";
 
     const buttonGroup = document.createElement("div");
@@ -126,50 +126,140 @@
     header.appendChild(buttonGroup);
     box.appendChild(header);
 
-    // Add week selector
+    // Add controls container
     const controls = document.createElement("div");
     controls.style.cssText = `
         margin-bottom: 15px;
         padding-bottom: 10px;
         border-bottom: 1px solid #ccc;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
     `;
 
-    const select = document.createElement("select");
-    select.style.cssText = `
-        margin-right: 10px;
+    // Add type selector
+    const typeSelect = document.createElement("select");
+    typeSelect.style.cssText = `
         padding: 5px;
         border-radius: 3px;
         border: 1px solid #ccc;
+        width: 100%;
     `;
 
-    const options = [
-      { value: "current", text: "Current Week" },
-      { value: "last", text: "Last Week" },
+    // Add default option
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.text = "Select report type";
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    typeSelect.appendChild(defaultOption);
+
+    const typeOptions = [
+      { value: "daily", text: "Daily Statistics" },
+      { value: "weekly", text: "Weekly Statistics" },
     ];
 
-    options.forEach((opt) => {
+    typeOptions.forEach((opt) => {
       const option = document.createElement("option");
       option.value = opt.value;
       option.text = opt.text;
-      select.appendChild(option);
+      typeSelect.appendChild(option);
     });
 
+    // Add week selector (initially hidden)
+    const weekSelect = document.createElement("select");
+    weekSelect.style.cssText = `
+        padding: 5px;
+        border-radius: 3px;
+        border: 1px solid #ccc;
+        display: none;
+        width: 100%;
+    `;
+
+    const weekOptions = [
+      { value: "current", text: "Current Week" },
+      { value: "last", text: "Last Week" },
+      { value: "twoWeeks", text: "Two Weeks Ago" },
+      { value: "threeWeeks", text: "Three Weeks Ago" },
+      { value: "fourWeeks", text: "Four Weeks Ago" },
+    ];
+
+    weekOptions.forEach((opt) => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.text = opt.text;
+      weekSelect.appendChild(option);
+    });
+
+    // Add date picker
+    const datePicker = createDatePicker();
+
+    // Add refresh button with initial disabled state
     const refreshButton = document.createElement("button");
-    refreshButton.textContent = "Refresh";
+    refreshButton.innerHTML = "Refresh";
     refreshButton.style.cssText = `
         padding: 5px 10px;
         border-radius: 3px;
         border: 1px solid #ccc;
-        background: #f4f5f7;
-        cursor: pointer;
+        background: #fff;
+        cursor: not-allowed;
+        opacity: 0.6;
+        width: 100%;
+        margin-top: 5px;
     `;
+    refreshButton.disabled = true;
 
-    refreshButton.onclick = () => {
-      const weekType = select.value;
-      fetchStats(weekType, box);
+    // Add change handlers for date and week selectors
+    datePicker.querySelector("input").onchange = updateRefreshButton;
+    weekSelect.onchange = updateRefreshButton;
+
+    // Handle type selection change
+    typeSelect.onchange = () => {
+      if (typeSelect.value === "daily") {
+        weekSelect.style.display = "none";
+        datePicker.style.display = "block";
+        weekSelect.value = ""; // Clear week selection
+        datePicker.querySelector("input").value = ""; // Clear date selection
+        title.textContent = "Daily Statistics";
+      } else if (typeSelect.value === "weekly") {
+        weekSelect.style.display = "inline-block";
+        datePicker.style.display = "none";
+        datePicker.querySelector("input").value = ""; // Clear date selection
+        weekSelect.value = ""; // Clear week selection
+        title.textContent = "Weekly Statistics";
+      }
+      updateRefreshButton();
     };
 
-    controls.appendChild(select);
+    // Function to check if selections are valid
+    function updateRefreshButton() {
+      const isValid =
+        typeSelect.value &&
+        ((typeSelect.value === "daily" &&
+          datePicker.querySelector("input").value) ||
+          (typeSelect.value === "weekly" && weekSelect.value));
+
+      refreshButton.disabled = !isValid;
+      refreshButton.style.cursor = isValid ? "pointer" : "not-allowed";
+      refreshButton.style.opacity = isValid ? "1" : "0.6";
+    }
+
+    // Add click handler for refresh
+    refreshButton.onclick = () => {
+      if (refreshButton.disabled) return;
+
+      const type = typeSelect.value;
+      if (type === "daily") {
+        fetchDailyStats(datePicker.querySelector("input").value, box);
+      } else {
+        fetchStats(weekSelect.value, box);
+      }
+    };
+
+    // Assemble controls
+    controls.appendChild(typeSelect);
+    controls.appendChild(weekSelect);
+    controls.appendChild(datePicker);
     controls.appendChild(refreshButton);
     box.appendChild(controls);
 
@@ -238,7 +328,7 @@
       tickets: [],
       carryover: 0,
       newTickets: 0,
-      completed: 0,
+      completed: items.length, // Set total count of tickets
       bugs: 0,
       userStories: 0,
       totalPoints: 0,
@@ -299,11 +389,10 @@
       // Add points
       stats.totalPoints += points;
       if (status === "Done") {
-        stats.completed++;
         stats.completedPoints += points;
       }
 
-      // Determine if carryover or new
+      // Only process carryover and new tickets for weekly view
       const lastWeekStart = new Date();
       lastWeekStart.setDate(lastWeekStart.getDate() - 7);
       if (created < lastWeekStart) {
@@ -320,25 +409,42 @@
   // Update stats box content
   function updateStatsBox(box, stats) {
     const content = box.querySelector("#stats-content");
+    const type = content.getAttribute("data-type") || "weekly";
+    const titlePrefix = type === "daily" ? "Daily" : "Weekly";
+
     content.innerHTML = `
-      <h3>Weekly Statistics</h3>
-      <div style="margin-bottom: 15px;">
-        <p><strong>Ticket Counts:</strong></p>
-        <ul style="list-style: none; padding-left: 10px;">
-          <li>Carryover Tickets: ${stats.carryover}</li>
-          <li>New Tickets: ${stats.newTickets}</li>
-          <li>Completed Tickets: ${stats.completed}</li>
-          <li>Bug Tickets: ${stats.bugs}</li>
-          <li>User Story Tickets: ${stats.userStories}</li>
-        </ul>
-      </div>
-      <div style="margin-bottom: 15px;">
-        <p><strong>Story Points:</strong></p>
-        <ul style="list-style: none; padding-left: 10px;">
-          <li>Total Points: ${stats.totalPoints}</li>
-          <li>Completed Points: ${stats.completedPoints}</li>
-        </ul>
-      </div>
+      <h3>${titlePrefix} Statistics</h3>
+      ${
+        type === "weekly"
+          ? `
+          <div style="margin-bottom: 15px;">
+            <p><strong>Ticket Counts:</strong></p>
+            <ul style="list-style: none; padding-left: 10px;">
+              <li>Carryover Tickets: ${stats.carryover}</li>
+              <li>New Tickets: ${stats.newTickets}</li>
+              <li>Completed Tickets: ${stats.completed}</li>
+              <li>Bug Tickets: ${stats.bugs}</li>
+              <li>User Story Tickets: ${stats.userStories}</li>
+            </ul>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <p><strong>Story Points:</strong></p>
+            <ul style="list-style: none; padding-left: 10px;">
+              <li>Total Points: ${stats.totalPoints}</li>
+              <li>Completed Points: ${stats.completedPoints}</li>
+            </ul>
+          </div>
+          `
+          : `
+          <div style="margin-bottom: 15px;">
+            <p><strong>Summary:</strong></p>
+            <ul style="list-style: none; padding-left: 10px;">
+              <li>Total Tickets: ${stats.completed}</li>
+              <li>Points Completed: ${stats.completedPoints}</li>
+            </ul>
+          </div>
+          `
+      }
       <div>
         <p><strong>Tickets:</strong></p>
         <ul style="max-height: 200px; overflow-y: auto; margin: 0; padding-left: 20px;">
@@ -370,6 +476,8 @@
   // Fetch stats function
   function fetchStats(weekType, statsBox) {
     showLoading(statsBox);
+    const content = statsBox.querySelector("#stats-content");
+    content.setAttribute("data-type", "weekly");
 
     const jqlQuery = getJqlQuery(weekType);
 
@@ -437,7 +545,7 @@
     // Create the button with JIRA's styling
     const button = document.createElement("button");
     button.className = "css-oshqpj";
-    button.setAttribute("aria-label", "Weekly Stats");
+    button.setAttribute("aria-label", "Statistics");
     button.setAttribute("tabindex", "0");
     button.setAttribute("type", "button");
 
@@ -448,7 +556,7 @@
     const iconSpan = document.createElement("span");
     iconSpan.setAttribute("data-vc", "icon-undefined");
     iconSpan.setAttribute("role", "img");
-    iconSpan.setAttribute("aria-label", "Weekly Stats");
+    iconSpan.setAttribute("aria-label", "Statistics");
     iconSpan.className = "css-snhnyn";
     iconSpan.style.cssText = `
         --icon-primary-color: currentColor;
@@ -550,9 +658,12 @@
   // Replace the direct init() call with waitForHeader
   waitForHeader();
 
-  // Add function to generate copy text
+  // Update the generateCopyText function
   function generateCopyText(content) {
     const stats = {};
+    const type =
+      content.closest("#stats-content")?.getAttribute("data-type") || "weekly";
+    const titlePrefix = type === "daily" ? "Daily" : "Weekly";
 
     // Extract ticket counts
     content.querySelectorAll("ul li").forEach((li) => {
@@ -564,24 +675,33 @@
     });
 
     // Format text
-    let text = "Weekly Statistics Summary\n\n";
-    text += "Ticket Counts:\n";
-    if (stats["Carryover Tickets"])
-      text += `- Carryover Tickets: ${stats["Carryover Tickets"]}\n`;
-    if (stats["New Tickets"])
-      text += `- New Tickets: ${stats["New Tickets"]}\n`;
-    if (stats["Completed Tickets"])
-      text += `- Completed Tickets: ${stats["Completed Tickets"]}\n`;
-    if (stats["Bug Tickets"])
-      text += `- Bug Tickets: ${stats["Bug Tickets"]}\n`;
-    if (stats["User Story Tickets"])
-      text += `- User Story Tickets: ${stats["User Story Tickets"]}\n`;
+    let text = `${titlePrefix} Statistics Summary\n\n`;
 
-    text += "\nStory Points:\n";
-    if (stats["Total Points"])
-      text += `- Total Points: ${stats["Total Points"]}\n`;
-    if (stats["Completed Points"])
-      text += `- Completed Points: ${stats["Completed Points"]}\n`;
+    if (type === "weekly") {
+      text += "Ticket Counts:\n";
+      if (stats["Carryover Tickets"])
+        text += `- Carryover Tickets: ${stats["Carryover Tickets"]}\n`;
+      if (stats["New Tickets"])
+        text += `- New Tickets: ${stats["New Tickets"]}\n`;
+      if (stats["Completed Tickets"])
+        text += `- Completed Tickets: ${stats["Completed Tickets"]}\n`;
+      if (stats["Bug Tickets"])
+        text += `- Bug Tickets: ${stats["Bug Tickets"]}\n`;
+      if (stats["User Story Tickets"])
+        text += `- User Story Tickets: ${stats["User Story Tickets"]}\n`;
+
+      text += "\nStory Points:\n";
+      if (stats["Total Points"])
+        text += `- Total Points: ${stats["Total Points"]}\n`;
+      if (stats["Completed Points"])
+        text += `- Completed Points: ${stats["Completed Points"]}\n`;
+    } else {
+      text += "Summary:\n";
+      if (stats["Total Tickets"])
+        text += `- Total Tickets: ${stats["Total Tickets"]}\n`;
+      if (stats["Points Completed"])
+        text += `- Points Completed: ${stats["Points Completed"]}\n`;
+    }
 
     // Add tickets list
     text += "\nTickets:\n";
@@ -590,5 +710,88 @@
     });
 
     return text;
+  }
+
+  // Add this function to create date picker
+  function createDatePicker() {
+    const container = document.createElement("div");
+    container.style.cssText = `
+        margin-top: 10px;
+        display: none;
+    `;
+
+    const datePicker = document.createElement("input");
+    datePicker.type = "date";
+    datePicker.style.cssText = `
+        padding: 5px;
+        border-radius: 3px;
+        border: 1px solid #ccc;
+        width: 100%;
+    `;
+
+    // Remove default value setting
+    datePicker.value = ""; // Start with empty value
+
+    container.appendChild(datePicker);
+    return container;
+  }
+
+  // Add function to fetch daily statistics
+  function fetchDailyStats(date, statsBox) {
+    showLoading(statsBox);
+    const content = statsBox.querySelector("#stats-content");
+    content.setAttribute("data-type", "daily");
+
+    const jqlQuery = `assignee WAS currentUser() AND status changed FROM "In Progress" TO "Ready for Peer Review" ON "${date}"`;
+
+    // Get CSRF token from cookie
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(";").shift();
+    };
+    const atlToken = getCookie("atlassian.xsrf.token");
+
+    // Format JQL query
+    const formattedJql = jqlQuery
+      .replace(/ /g, "+")
+      .replace(/"/g, "%22")
+      .replace(/\(/g, "%28")
+      .replace(/\)/g, "%29")
+      .replace(/,/g, "%2C");
+
+    const xmlUrl = `https://auxosolutions.atlassian.net/sr/jira.issueviews:searchrequest-xml/temp/SearchRequest.xml?jqlQuery=${formattedJql}&atl_token=${atlToken}&tempMax=1000`;
+
+    // Fetch XML data
+    GM_xmlhttpRequest({
+      method: "GET",
+      url: xmlUrl,
+      headers: {
+        Accept: "application/xml",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-AUSERNAME":
+          document.querySelector('meta[name="ajs-remote-user"]')?.content || "",
+      },
+      withCredentials: true,
+      onload: function (response) {
+        try {
+          if (response.status !== 200) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          const stats = processXMLData(response.responseText);
+          updateStatsBox(statsBox, stats);
+        } catch (error) {
+          console.error("Error processing JIRA data:", error);
+          showError(statsBox, error.message);
+        }
+      },
+      onerror: function (error) {
+        console.error("Network error:", error);
+        showError(
+          statsBox,
+          "Failed to fetch data. Please check your connection."
+        );
+      },
+    });
   }
 })();
