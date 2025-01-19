@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.1
+// @version      0.2
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -13,8 +13,9 @@
 
   // Add constants at the top of the file
   const CURRENT_USER = "Md Fuad Hasan";
-  const STATUS_IN_PROGRESS = "In Progress";
+  const COMPLETE_STATUS_FROM = "In Progress";
   const COMPLETE_STATUS_TO = "Ready for Peer Review";
+  const IN_PROGRESS = ["In Progress", "Ready For Work"];
 
   // Wait for page to be fully loaded and stable
   function waitForHeader() {
@@ -571,15 +572,18 @@
   function getJqlQuery(weekType) {
     const baseQuery =
       'assignee WAS currentUser() AND status changed FROM "' +
-      STATUS_IN_PROGRESS +
+      COMPLETE_STATUS_FROM +
       '" TO "' +
       COMPLETE_STATUS_TO +
       '"';
 
+    const notInProgress =
+      ' AND status NOT IN ("' + IN_PROGRESS.join('", "') + '")';
+
     if (weekType === "current") {
-      return `${baseQuery} DURING (startOfWeek(), endOfWeek())`;
+      return `${baseQuery} DURING (startOfWeek(), endOfWeek())${notInProgress}`;
     } else {
-      return `${baseQuery} DURING (startOfWeek(-1), endOfWeek(-1w))`;
+      return `${baseQuery} DURING (startOfWeek(-1), endOfWeek(-1w))${notInProgress}`;
     }
   }
 
@@ -874,7 +878,10 @@
     const content = statsBox.querySelector("#stats-content");
     content.setAttribute("data-type", "daily");
 
-    const jqlQuery = `assignee WAS currentUser() AND status changed FROM "${STATUS_IN_PROGRESS}" TO "${COMPLETE_STATUS_TO}" ON "${date}"`;
+    const baseQuery = `assignee WAS currentUser() AND status changed FROM "${COMPLETE_STATUS_FROM}" TO "${COMPLETE_STATUS_TO}" ON "${date}"`;
+    const notInProgress =
+      ' AND status NOT IN ("' + IN_PROGRESS.join('", "') + '")';
+    const jqlQuery = baseQuery + notInProgress;
 
     // Get CSRF token from cookie
     const getCookie = (name) => {
