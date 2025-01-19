@@ -11,6 +11,11 @@
 (function () {
   "use strict";
 
+  // Add constants at the top of the file
+  const CURRENT_USER = "Md Fuad Hasan";
+  const STATUS_IN_PROGRESS = "In Progress";
+  const COMPLETE_STATUS_TO = "Ready for Peer Review";
+
   // Wait for page to be fully loaded and stable
   function waitForHeader() {
     const headerSelector = '[data-vc="atlassian-navigation-secondary-actions"]';
@@ -318,8 +323,86 @@
     `;
   }
 
-  // Process XML data
-  function processXMLData(xmlText) {
+  // Add function to fetch changelog
+  async function fetchChangelog(key) {
+    console.log(`Fetching changelog for ${key}`);
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(";").shift();
+    };
+    const atlToken = getCookie("atlassian.xsrf.token");
+
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: `https://auxosolutions.atlassian.net/rest/api/3/issue/${key}/changelog`,
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "X-AUSERNAME":
+            document.querySelector('meta[name="ajs-remote-user"]')?.content ||
+            "",
+        },
+        withCredentials: true,
+        onload: function (response) {
+          try {
+            if (response.status !== 200) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+            resolve(JSON.parse(response.responseText));
+          } catch (error) {
+            reject(error);
+          }
+        },
+        onerror: reject,
+      });
+    });
+  }
+
+  // Add helper function to get week boundaries
+  function getWeekBoundaries(weekType) {
+    const now = new Date();
+    const currentDay = now.getDay(); // Sunday = 0, Monday = 1, etc.
+
+    // Get to the start of current week (Sunday)
+    const sundayOffset = -currentDay; // No special case needed since Sunday is 0
+    const currentWeekSunday = new Date(now);
+    currentWeekSunday.setDate(now.getDate() + sundayOffset);
+    currentWeekSunday.setHours(0, 0, 0, 0);
+
+    let targetStart = new Date(currentWeekSunday);
+
+    if (weekType !== "current") {
+      const weeksToSubtract = {
+        last: 7,
+        twoWeeks: 14,
+        threeWeeks: 21,
+        fourWeeks: 28,
+      }[weekType];
+      targetStart.setDate(targetStart.getDate() - weeksToSubtract);
+    }
+
+    const targetEnd = new Date(targetStart);
+    targetEnd.setDate(targetStart.getDate() + 7);
+
+    console.log("Week boundaries:", {
+      weekType,
+      startDate: targetStart.toLocaleDateString(),
+      endDate: targetEnd.toLocaleDateString(),
+      startDay: targetStart.toLocaleDateString("en-US", { weekday: "long" }),
+      endDay: targetEnd.toLocaleDateString("en-US", { weekday: "long" }),
+      isSunday: currentDay === 0,
+    });
+
+    return { start: targetStart, end: targetEnd };
+  }
+
+  // Update processXMLData function
+  async function processXMLData(xmlText, weekType = "current") {
+    console.log(`Processing XML data for week type: ${weekType}`);
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlText, "text/xml");
     const items = xmlDoc.getElementsByTagName("item");
@@ -328,17 +411,28 @@
       tickets: [],
       carryover: 0,
       newTickets: 0,
-      completed: items.length, // Set total count of tickets
+      completed: items.length,
       bugs: 0,
       userStories: 0,
       totalPoints: 0,
       completedPoints: 0,
     };
 
+    // Skip week boundaries calculation for daily stats
+    const weekBoundaries =
+      weekType === "daily" ? null : getWeekBoundaries(weekType);
+    if (weekBoundaries) {
+      console.log("Week boundaries:", {
+        start: weekBoundaries.start.toISOString(),
+        end: weekBoundaries.end.toISOString(),
+      });
+    }
+
     // Process each item
     for (let item of items) {
-      // Basic info
       const key = item.getElementsByTagName("key")[0].textContent;
+      console.log(`\nProcessing ticket ${key}:`);
+
       const type = item.getElementsByTagName("type")[0].textContent;
       const status = item.getElementsByTagName("status")[0].textContent;
       const created = new Date(
@@ -351,14 +445,6 @@
       const customfields = item.getElementsByTagName("customfield");
       for (let field of customfields) {
         if (
-          field.getAttribute("key") === "com.pyxis.greenhopper.jira:gh-sprint"
-        ) {
-          const values = field.getElementsByTagName("customfieldvalue");
-          if (values && values.length > 0) {
-            const sprint = values[0].textContent;
-            // Process sprint info if needed
-          }
-        } else if (
           field.getAttribute("key") ===
           "com.atlassian.jira.plugin.system.customfieldtypes:float"
         ) {
@@ -369,15 +455,50 @@
         }
       }
 
-      const ticketInfo = {
-        key,
-        type,
-        status,
-        points,
-        created,
-        summary,
-      };
+      // Only process changelog for weekly stats
+      if (weekType !== "daily") {
+        try {
+          const changelog = await fetchChangelog(key);
+          console.log(`Changelog for ${key}:`, changelog);
+
+          const assignmentChange = changelog.values.find((change) =>
+            change.items.some(
+              (item) =>
+                item.field === "assignee" && item.toString === CURRENT_USER
+            )
+          );
+
+          if (assignmentChange) {
+            const assignmentDate = new Date(assignmentChange.created);
+            console.log(`Assignment details for ${key}:`, {
+              date: assignmentDate.toISOString(),
+              beforeWeekStart: assignmentDate < weekBoundaries.start,
+              beforeWeekEnd: assignmentDate < weekBoundaries.end,
+            });
+
+            if (assignmentDate < weekBoundaries.start) {
+              console.log(`${key} is a carryover ticket`);
+              stats.carryover++;
+            } else if (assignmentDate < weekBoundaries.end) {
+              console.log(`${key} is a new ticket`);
+              stats.newTickets++;
+            } else {
+              console.log(`${key} assignment date is outside the week range`);
+            }
+          } else {
+            console.log(`No assignment found for ${key} to ${CURRENT_USER}`);
+          }
+        } catch (error) {
+          console.error(`Error fetching changelog for ${key}:`, error);
+        }
+      }
+
+      const ticketInfo = { key, type, status, points, created, summary };
       stats.tickets.push(ticketInfo);
+
+      // Add points - all tickets in results are completed
+      stats.totalPoints += points;
+      stats.completedPoints += points; // All tickets are completed
 
       // Count by type
       if (type === "Bug") {
@@ -385,24 +506,9 @@
       } else {
         stats.userStories++;
       }
-
-      // Add points
-      stats.totalPoints += points;
-      if (status === "Done") {
-        stats.completedPoints += points;
-      }
-
-      // Only process carryover and new tickets for weekly view
-      const lastWeekStart = new Date();
-      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-      if (created < lastWeekStart) {
-        stats.carryover++;
-      } else {
-        stats.newTickets++;
-      }
     }
 
-    console.log("Processed stats:", stats); // Debug log
+    console.log("\nFinal stats:", stats);
     return stats;
   }
 
@@ -413,58 +519,62 @@
     const titlePrefix = type === "daily" ? "Daily" : "Weekly";
 
     content.innerHTML = `
-      <h3>${titlePrefix} Statistics</h3>
-      ${
-        type === "weekly"
-          ? `
-          <div style="margin-bottom: 15px;">
-            <p><strong>Ticket Counts:</strong></p>
-            <ul style="list-style: none; padding-left: 10px;">
-              <li>Carryover Tickets: ${stats.carryover}</li>
-              <li>New Tickets: ${stats.newTickets}</li>
-              <li>Completed Tickets: ${stats.completed}</li>
-              <li>Bug Tickets: ${stats.bugs}</li>
-              <li>User Story Tickets: ${stats.userStories}</li>
+        <h3>${titlePrefix} Statistics</h3>
+        ${
+          type === "weekly"
+            ? `
+            <div style="margin-bottom: 15px;">
+                <p><strong>Ticket Counts:</strong></p>
+                <ul id="stats-summary" style="list-style: none; padding-left: 10px;">
+                    <li>Carryover Tickets: ${stats.carryover}</li>
+                    <li>New Tickets: ${stats.newTickets}</li>
+                    <li>Completed Tickets: ${stats.completed}</li>
+                    <li>Bug Tickets: ${stats.bugs}</li>
+                    <li>User Story Tickets: ${stats.userStories}</li>
+                </ul>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <p><strong>Story Points:</strong></p>
+                <ul id="points-summary" style="list-style: none; padding-left: 10px;">
+                    <li>Total Points: ${stats.totalPoints}</li>
+                    <li>Completed Points: ${stats.completedPoints}</li>
+                </ul>
+            </div>
+            `
+            : `
+            <div style="margin-bottom: 15px;">
+                <p><strong>Summary:</strong></p>
+                <ul id="stats-summary" style="list-style: none; padding-left: 10px;">
+                    <li>Total Tickets: ${stats.completed}</li>
+                    <li>Points Completed: ${stats.completedPoints}</li>
+                </ul>
+            </div>
+            `
+        }
+        <div>
+            <p><strong>Tickets:</strong></p>
+            <ul id="tickets-list" style="max-height: 200px; overflow-y: auto; margin: 0; padding-left: 20px;">
+                ${stats.tickets
+                  .map(
+                    (t) =>
+                      `<li title="${t.summary}">${t.key} (${t.type}) - ${
+                        t.status
+                      }${t.points ? ` [${t.points}pts]` : ""}</li>`
+                  )
+                  .join("")}
             </ul>
-          </div>
-          <div style="margin-bottom: 15px;">
-            <p><strong>Story Points:</strong></p>
-            <ul style="list-style: none; padding-left: 10px;">
-              <li>Total Points: ${stats.totalPoints}</li>
-              <li>Completed Points: ${stats.completedPoints}</li>
-            </ul>
-          </div>
-          `
-          : `
-          <div style="margin-bottom: 15px;">
-            <p><strong>Summary:</strong></p>
-            <ul style="list-style: none; padding-left: 10px;">
-              <li>Total Tickets: ${stats.completed}</li>
-              <li>Points Completed: ${stats.completedPoints}</li>
-            </ul>
-          </div>
-          `
-      }
-      <div>
-        <p><strong>Tickets:</strong></p>
-        <ul style="max-height: 200px; overflow-y: auto; margin: 0; padding-left: 20px;">
-          ${stats.tickets
-            .map(
-              (t) =>
-                `<li title="${t.summary}">${t.key} (${t.type}) - ${t.status}${
-                  t.points ? ` [${t.points}pts]` : ""
-                }</li>`
-            )
-            .join("")}
-        </ul>
-      </div>
+        </div>
     `;
   }
 
   // Get JQL query based on week selection
   function getJqlQuery(weekType) {
     const baseQuery =
-      'assignee WAS currentUser() AND status changed FROM "In Progress" TO "Ready for Peer Review"';
+      'assignee WAS currentUser() AND status changed FROM "' +
+      STATUS_IN_PROGRESS +
+      '" TO "' +
+      COMPLETE_STATUS_TO +
+      '"';
 
     if (weekType === "current") {
       return `${baseQuery} DURING (startOfWeek(), endOfWeek())`;
@@ -473,7 +583,7 @@
     }
   }
 
-  // Fetch stats function
+  // Update fetchStats to pass weekType
   function fetchStats(weekType, statsBox) {
     showLoading(statsBox);
     const content = statsBox.querySelector("#stats-content");
@@ -510,12 +620,12 @@
           document.querySelector('meta[name="ajs-remote-user"]')?.content || "",
       },
       withCredentials: true,
-      onload: function (response) {
+      onload: async function (response) {
         try {
           if (response.status !== 200) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
-          const stats = processXMLData(response.responseText);
+          const stats = await processXMLData(response.responseText, weekType);
           updateStatsBox(statsBox, stats);
         } catch (error) {
           console.error("Error processing JIRA data:", error);
@@ -665,14 +775,31 @@
       content.closest("#stats-content")?.getAttribute("data-type") || "weekly";
     const titlePrefix = type === "daily" ? "Daily" : "Weekly";
 
-    // Extract ticket counts
-    content.querySelectorAll("ul li").forEach((li) => {
-      const text = li.textContent;
-      if (text.includes(":")) {
-        const [key, value] = text.split(":");
-        stats[key.trim()] = value.trim();
-      }
-    });
+    // Extract ticket counts from stats summary
+    content
+      .querySelector("#stats-summary")
+      .querySelectorAll("li")
+      .forEach((li) => {
+        const text = li.textContent;
+        if (text.includes(":")) {
+          const [key, value] = text.split(":");
+          stats[key.trim()] = value.trim();
+        }
+      });
+
+    // Extract points from points summary if weekly
+    if (type === "weekly") {
+      content
+        .querySelector("#points-summary")
+        .querySelectorAll("li")
+        .forEach((li) => {
+          const text = li.textContent;
+          if (text.includes(":")) {
+            const [key, value] = text.split(":");
+            stats[key.trim()] = value.trim();
+          }
+        });
+    }
 
     // Format text
     let text = `${titlePrefix} Statistics Summary\n\n`;
@@ -702,12 +829,17 @@
       if (stats["Points Completed"])
         text += `- Points Completed: ${stats["Points Completed"]}\n`;
     }
+    text += "\n- Blocked Tickets: 0\n";
+    text += "- Priority Level /Blocker Impact: N/A\n";
 
     // Add tickets list
     text += "\nTickets:\n";
-    content.querySelectorAll("ul:last-child li").forEach((li) => {
-      text += `- ${li.textContent}\n`;
-    });
+    content
+      .querySelector("#tickets-list")
+      .querySelectorAll("li")
+      .forEach((li) => {
+        text += `- ${li.textContent}\n`;
+      });
 
     return text;
   }
@@ -742,7 +874,7 @@
     const content = statsBox.querySelector("#stats-content");
     content.setAttribute("data-type", "daily");
 
-    const jqlQuery = `assignee WAS currentUser() AND status changed FROM "In Progress" TO "Ready for Peer Review" ON "${date}"`;
+    const jqlQuery = `assignee WAS currentUser() AND status changed FROM "${STATUS_IN_PROGRESS}" TO "${COMPLETE_STATUS_TO}" ON "${date}"`;
 
     // Get CSRF token from cookie
     const getCookie = (name) => {
@@ -773,12 +905,12 @@
           document.querySelector('meta[name="ajs-remote-user"]')?.content || "",
       },
       withCredentials: true,
-      onload: function (response) {
+      onload: async function (response) {
         try {
           if (response.status !== 200) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
-          const stats = processXMLData(response.responseText);
+          const stats = await processXMLData(response.responseText, "daily");
           updateStatsBox(statsBox, stats);
         } catch (error) {
           console.error("Error processing JIRA data:", error);
