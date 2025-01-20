@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.2
+// @version      0.3
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -12,10 +12,122 @@
   "use strict";
 
   // Add constants at the top of the file
-  const CURRENT_USER = "Md Fuad Hasan";
-  const COMPLETE_STATUS_FROM = "In Progress";
-  const COMPLETE_STATUS_TO = "Ready for Peer Review";
-  const IN_PROGRESS = ["In Progress", "Ready For Work"];
+  // Default values for settings
+  const DEFAULT_SETTINGS = {
+    currentUser: "Md Fuad Hasan",
+    completeStatusFrom: "In Progress",
+    completeStatusTo: "Ready for Peer Review",
+    inProgress: ["In Progress", "Ready For Work"],
+  };
+
+  // Load settings from local storage or use defaults
+  let settings = loadSettings();
+
+  // Functions to handle settings
+  function loadSettings() {
+    const savedSettings = localStorage.getItem("jiraStatsSettings");
+    return savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS;
+  }
+
+  function saveSettings(newSettings) {
+    localStorage.setItem("jiraStatsSettings", JSON.stringify(newSettings));
+    settings = newSettings;
+  }
+
+  // Create settings UI
+  function createSettingsUI() {
+    const container = document.createElement("div");
+    container.style.cssText = `
+      padding: 15px;
+      border-bottom: 1px solid #ccc;
+      margin-bottom: 15px;
+    `;
+
+    const title = document.createElement("h3");
+    title.textContent = "Settings";
+    title.style.marginBottom = "10px";
+    container.appendChild(title);
+
+    // Current User
+    const userLabel = document.createElement("label");
+    userLabel.textContent = "Current User:";
+    const userInput = document.createElement("input");
+    userInput.type = "text";
+    userInput.value = settings.currentUser;
+    userInput.style.cssText = `
+      width: 100%;
+      padding: 5px;
+      margin: 5px 0 10px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    `;
+
+    // Status From
+    const fromLabel = document.createElement("label");
+    fromLabel.textContent = "Complete Status From:";
+    const fromInput = document.createElement("input");
+    fromInput.type = "text";
+    fromInput.value = settings.completeStatusFrom;
+    fromInput.style.cssText = userInput.style.cssText;
+
+    // Status To
+    const toLabel = document.createElement("label");
+    toLabel.textContent = "Complete Status To:";
+    const toInput = document.createElement("input");
+    toInput.type = "text";
+    toInput.value = settings.completeStatusTo;
+    toInput.style.cssText = userInput.style.cssText;
+
+    // In Progress Statuses
+    const inProgressLabel = document.createElement("label");
+    inProgressLabel.textContent = "In Progress Statuses (comma-separated):";
+    const inProgressInput = document.createElement("input");
+    inProgressInput.type = "text";
+    inProgressInput.value = settings.inProgress.join(",");
+    inProgressInput.style.cssText = userInput.style.cssText;
+
+    // Save Button
+    const saveButton = document.createElement("button");
+    saveButton.textContent = "Save Settings";
+    saveButton.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      margin-top: 10px;
+      background: #0052CC;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    `;
+
+    saveButton.onclick = () => {
+      const newSettings = {
+        currentUser: userInput.value,
+        completeStatusFrom: fromInput.value,
+        completeStatusTo: toInput.value,
+        inProgress: inProgressInput.value.split(",").map((s) => s.trim()),
+      };
+      saveSettings(newSettings);
+      // Show success message
+      const originalText = saveButton.textContent;
+      saveButton.textContent = "Saved!";
+      setTimeout(() => {
+        saveButton.textContent = originalText;
+      }, 1000);
+    };
+
+    container.appendChild(userLabel);
+    container.appendChild(userInput);
+    container.appendChild(fromLabel);
+    container.appendChild(fromInput);
+    container.appendChild(toLabel);
+    container.appendChild(toInput);
+    container.appendChild(inProgressLabel);
+    container.appendChild(inProgressInput);
+    container.appendChild(saveButton);
+
+    return container;
+  }
 
   // Wait for page to be fully loaded and stable
   function waitForHeader() {
@@ -80,6 +192,18 @@
     buttonGroup.style.display = "flex";
     buttonGroup.style.gap = "5px";
 
+    // Add settings button
+    const settingsButton = document.createElement("button");
+    settingsButton.innerHTML = "⚙️";
+    settingsButton.title = "Settings";
+    settingsButton.style.cssText = `
+        border: none;
+        background: none;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0 5px;
+    `;
+
     // Add copy button
     const copyButton = document.createElement("button");
     copyButton.innerHTML = "📋";
@@ -104,6 +228,21 @@
     `;
 
     // Set up button click handlers
+    let settingsUI = null;
+    settingsButton.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (settingsUI) {
+        settingsUI.remove();
+        settingsUI = null;
+        settingsButton.style.color = "";
+      } else {
+        settingsUI = createSettingsUI();
+        box.insertBefore(settingsUI, controls);
+        settingsButton.style.color = "#0052CC";
+      }
+    };
+
     copyButton.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -126,6 +265,7 @@
     };
 
     // Assemble the header
+    buttonGroup.appendChild(settingsButton);
     buttonGroup.appendChild(copyButton);
     buttonGroup.appendChild(closeButton);
     header.appendChild(title);
@@ -465,7 +605,8 @@
           const assignmentChange = changelog.values.find((change) =>
             change.items.some(
               (item) =>
-                item.field === "assignee" && item.toString === CURRENT_USER
+                item.field === "assignee" &&
+                item.toString === settings.currentUser
             )
           );
 
@@ -487,7 +628,9 @@
               console.log(`${key} assignment date is outside the week range`);
             }
           } else {
-            console.log(`No assignment found for ${key} to ${CURRENT_USER}`);
+            console.log(
+              `No assignment found for ${key} to ${settings.currentUser}`
+            );
           }
         } catch (error) {
           console.error(`Error fetching changelog for ${key}:`, error);
@@ -572,13 +715,13 @@
   function getJqlQuery(weekType) {
     const baseQuery =
       'assignee WAS currentUser() AND status changed FROM "' +
-      COMPLETE_STATUS_FROM +
+      settings.completeStatusFrom +
       '" TO "' +
-      COMPLETE_STATUS_TO +
+      settings.completeStatusTo +
       '"';
 
     const notInProgress =
-      ' AND status NOT IN ("' + IN_PROGRESS.join('", "') + '")';
+      ' AND status NOT IN ("' + settings.inProgress.join('", "') + '")';
 
     if (weekType === "current") {
       return `${baseQuery} DURING (startOfWeek(), endOfWeek())${notInProgress}`;
@@ -878,9 +1021,9 @@
     const content = statsBox.querySelector("#stats-content");
     content.setAttribute("data-type", "daily");
 
-    const baseQuery = `assignee WAS currentUser() AND status changed FROM "${COMPLETE_STATUS_FROM}" TO "${COMPLETE_STATUS_TO}" ON "${date}"`;
+    const baseQuery = `assignee WAS currentUser() AND status changed FROM "${settings.completeStatusFrom}" TO "${settings.completeStatusTo}" ON "${date}"`;
     const notInProgress =
-      ' AND status NOT IN ("' + IN_PROGRESS.join('", "') + '")';
+      ' AND status NOT IN ("' + settings.inProgress.join('", "') + '")';
     const jqlQuery = baseQuery + notInProgress;
 
     // Get CSRF token from cookie
