@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.3.2
+// @version      0.4
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -741,9 +741,17 @@
 
     if (weekType === "current") {
       return `${baseQuery} DURING (startOfWeek(), endOfWeek())${notInProgress}`;
-    } else {
-      return `${baseQuery} DURING (startOfWeek(-1), endOfWeek(-1w))${notInProgress}`;
     }
+
+    // Map weekType to number of weeks ago
+    const weeksAgo = {
+      last: 1,
+      twoWeeks: 2,
+      threeWeeks: 3,
+      fourWeeks: 4,
+    }[weekType];
+
+    return `${baseQuery} DURING (startOfWeek(-${weeksAgo}), endOfWeek(-${weeksAgo}w))${notInProgress}`;
   }
 
   // Update fetchStats to pass weekType
