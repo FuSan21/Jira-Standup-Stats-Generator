@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.3
+// @version      0.3.1
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -11,7 +11,6 @@
 (function () {
   "use strict";
 
-  // Add constants at the top of the file
   // Default values for settings
   const DEFAULT_SETTINGS = {
     currentUser: "Md Fuad Hasan",
@@ -38,33 +37,44 @@
   function createSettingsUI() {
     const container = document.createElement("div");
     container.style.cssText = `
-      padding: 15px;
-      border-bottom: 1px solid #ccc;
       margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #f8f9fa;
     `;
 
     const title = document.createElement("h3");
     title.textContent = "Settings";
-    title.style.marginBottom = "10px";
+    title.style.cssText = `
+      margin: 0 0 10px 0;
+      font-size: 14px;
+    `;
     container.appendChild(title);
 
     // Current User
     const userLabel = document.createElement("label");
     userLabel.textContent = "Current User:";
+    userLabel.style.fontSize = "12px";
     const userInput = document.createElement("input");
     userInput.type = "text";
     userInput.value = settings.currentUser;
     userInput.style.cssText = `
       width: 100%;
       padding: 5px;
-      margin: 5px 0 10px;
+      margin: 2px 0 8px;
       border: 1px solid #ccc;
       border-radius: 3px;
+      font-size: 12px;
+      box-sizing: border-box;
     `;
 
     // Status From
     const fromLabel = document.createElement("label");
     fromLabel.textContent = "Complete Status From:";
+    fromLabel.style.fontSize = "12px";
     const fromInput = document.createElement("input");
     fromInput.type = "text";
     fromInput.value = settings.completeStatusFrom;
@@ -73,6 +83,7 @@
     // Status To
     const toLabel = document.createElement("label");
     toLabel.textContent = "Complete Status To:";
+    toLabel.style.fontSize = "12px";
     const toInput = document.createElement("input");
     toInput.type = "text";
     toInput.value = settings.completeStatusTo;
@@ -81,6 +92,7 @@
     // In Progress Statuses
     const inProgressLabel = document.createElement("label");
     inProgressLabel.textContent = "In Progress Statuses (comma-separated):";
+    inProgressLabel.style.fontSize = "12px";
     const inProgressInput = document.createElement("input");
     inProgressInput.type = "text";
     inProgressInput.value = settings.inProgress.join(",");
@@ -91,13 +103,15 @@
     saveButton.textContent = "Save Settings";
     saveButton.style.cssText = `
       width: 100%;
-      padding: 8px;
+      padding: 6px;
       margin-top: 10px;
       background: #0052CC;
       color: white;
       border: none;
       border-radius: 3px;
       cursor: pointer;
+      font-size: 12px;
+      box-sizing: border-box;
     `;
 
     saveButton.onclick = () => {
