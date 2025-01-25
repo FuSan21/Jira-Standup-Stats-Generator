@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.4
+// @version      0.4.1
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -896,6 +896,12 @@
       return;
     }
 
+    // Check if button already exists
+    if (actionsList.querySelector('[aria-label="Statistics"]')) {
+      console.log("Statistics button already exists, skipping injection");
+      return;
+    }
+
     // Insert button before the notifications container
     const statsButton = createHeaderButton();
     actionsList.insertBefore(statsButton, actionsList.firstChild);
@@ -936,8 +942,45 @@
     };
   }
 
-  // Replace the direct init() call with waitForHeader
-  waitForHeader();
+  // Watch for page changes
+  function setupPageChangeObserver() {
+    let isProcessing = false;
+
+    // Create an observer instance
+    const observer = new MutationObserver((mutations) => {
+      if (isProcessing) return;
+      isProcessing = true;
+
+      // Check if we need to reinject the button
+      const actionsList = document.querySelector(
+        '[data-vc="atlassian-navigation-secondary-actions"]'
+      );
+      if (
+        actionsList &&
+        !actionsList.querySelector('[aria-label="Statistics"]')
+      ) {
+        console.log("Reinjecting stats button after page change");
+        init();
+      }
+
+      setTimeout(() => {
+        isProcessing = false;
+      }, 100);
+    });
+
+    // Start observing the document with the configured parameters
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  function start() {
+    waitForHeader();
+    setupPageChangeObserver();
+  }
+
+  start();
 
   // Update the generateCopyText function
   function generateCopyText(content) {
