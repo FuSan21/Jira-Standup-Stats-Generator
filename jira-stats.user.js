@@ -1,13 +1,20 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.4.1
+// @version      0.5.0
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
+// @changelog    0.5.0 (2024-03-19)
+//              - Add automatic current user detection using JIRA API
+//              - Add support for multiple completion statuses
+//              - Remove "Complete Status From" field
+//              - Improve JQL query format for multiple statuses
+//              0.4.1 (Previous version)
+//              - Initial stable version
 // ==/UserScript==
 
 (function () {
@@ -15,19 +22,32 @@
 
   // Default values for settings
   const DEFAULT_SETTINGS = {
-    currentUser: "Md Fuad Hasan",
-    completeStatusFrom: "In Progress",
-    completeStatusTo: "Ready for Peer Review",
+    currentUser: "",
+    completeStatusTo: ["Ready for Peer Review"],
     inProgress: ["In Progress", "Ready For Work"],
   };
 
   // Load settings from local storage or use defaults
-  let settings = loadSettings();
+  let settings = null; // Initialize settings as null
 
   // Functions to handle settings
-  function loadSettings() {
+  async function loadSettings() {
     const savedSettings = localStorage.getItem("jiraStatsSettings");
-    return savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS;
+    const settings = savedSettings
+      ? JSON.parse(savedSettings)
+      : DEFAULT_SETTINGS;
+
+    if (!settings.currentUser) {
+      try {
+        settings.currentUser = await fetchCurrentUser();
+        // Save the settings with the fetched username
+        localStorage.setItem("jiraStatsSettings", JSON.stringify(settings));
+      } catch (error) {
+        console.error("Error fetching current user:", error);
+      }
+    }
+
+    return settings;
   }
 
   function saveSettings(newSettings) {
@@ -73,22 +93,13 @@
       box-sizing: border-box;
     `;
 
-    // Status From
-    const fromLabel = document.createElement("label");
-    fromLabel.textContent = "Complete Status From:";
-    fromLabel.style.fontSize = "12px";
-    const fromInput = document.createElement("input");
-    fromInput.type = "text";
-    fromInput.value = settings.completeStatusFrom;
-    fromInput.style.cssText = userInput.style.cssText;
-
     // Status To
     const toLabel = document.createElement("label");
-    toLabel.textContent = "Complete Status To:";
+    toLabel.textContent = "Complete Status To (comma-separated):";
     toLabel.style.fontSize = "12px";
     const toInput = document.createElement("input");
     toInput.type = "text";
-    toInput.value = settings.completeStatusTo;
+    toInput.value = settings.completeStatusTo.join(",");
     toInput.style.cssText = userInput.style.cssText;
 
     // In Progress Statuses
@@ -119,8 +130,7 @@
     saveButton.onclick = () => {
       const newSettings = {
         currentUser: userInput.value,
-        completeStatusFrom: fromInput.value,
-        completeStatusTo: toInput.value,
+        completeStatusTo: toInput.value.split(",").map((s) => s.trim()),
         inProgress: inProgressInput.value.split(",").map((s) => s.trim()),
       };
       saveSettings(newSettings);
@@ -134,8 +144,6 @@
 
     container.appendChild(userLabel);
     container.appendChild(userInput);
-    container.appendChild(fromLabel);
-    container.appendChild(fromInput);
     container.appendChild(toLabel);
     container.appendChild(toInput);
     container.appendChild(inProgressLabel);
@@ -730,11 +738,9 @@
   // Get JQL query based on week selection
   function getJqlQuery(weekType) {
     const baseQuery =
-      'assignee WAS currentUser() AND status changed FROM "' +
-      settings.completeStatusFrom +
-      '" TO "' +
-      settings.completeStatusTo +
-      '"';
+      'assignee WAS currentUser() AND status changed TO ("' +
+      settings.completeStatusTo.join('", "') +
+      '")';
 
     const notInProgress =
       ' AND status NOT IN ("' + settings.inProgress.join('", "') + '")';
@@ -975,7 +981,8 @@
     });
   }
 
-  function start() {
+  async function start() {
+    await initializeSettings();
     waitForHeader();
     setupPageChangeObserver();
   }
@@ -1088,10 +1095,12 @@
     const content = statsBox.querySelector("#stats-content");
     content.setAttribute("data-type", "daily");
 
-    const baseQuery = `assignee WAS currentUser() AND status changed FROM "${settings.completeStatusFrom}" TO "${settings.completeStatusTo}" ON "${date}"`;
+    const baseQuery = `assignee WAS currentUser() AND status changed TO ("${settings.completeStatusTo.join(
+      '", "'
+    )}")`;
     const notInProgress =
       ' AND status NOT IN ("' + settings.inProgress.join('", "') + '")';
-    const jqlQuery = baseQuery + notInProgress;
+    const jqlQuery = baseQuery + ` ON "${date}"` + notInProgress;
 
     // Get CSRF token from cookie
     const getCookie = (name) => {
@@ -1142,5 +1151,42 @@
         );
       },
     });
+  }
+
+  // Add function to fetch current user
+  async function fetchCurrentUser() {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: "https://auxosolutions.atlassian.net/rest/api/latest/myself",
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "X-AUSERNAME":
+            document.querySelector('meta[name="ajs-remote-user"]')?.content ||
+            "",
+        },
+        withCredentials: true,
+        onload: function (response) {
+          try {
+            if (response.status !== 200) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+            const data = JSON.parse(response.responseText);
+            resolve(data.displayName);
+          } catch (error) {
+            reject(error);
+          }
+        },
+        onerror: reject,
+      });
+    });
+  }
+
+  // Update the initialization to handle async loadSettings
+  async function initializeSettings() {
+    settings = await loadSettings();
   }
 })();
