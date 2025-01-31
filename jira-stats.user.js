@@ -1,14 +1,17 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.5.0
+// @version      0.5.1
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
-// @changelog    0.5.0 (2024-03-19)
+// @changelog    0.5.1 (2024-03-19)
+//              - Add option to include cancelled tickets in statistics
+//              - Fix undefined cancelled status in settings
+//              0.5.0 (2024-03-19)
 //              - Add automatic current user detection using JIRA API
 //              - Add support for multiple completion statuses
 //              - Remove "Complete Status From" field
@@ -25,6 +28,8 @@
     currentUser: "",
     completeStatusTo: ["Ready for Peer Review"],
     inProgress: ["In Progress", "Ready For Work"],
+    includeCancelled: false,
+    cancelledStatus: "Cancelled",
   };
 
   // Load settings from local storage or use defaults
@@ -36,6 +41,9 @@
     const settings = savedSettings
       ? JSON.parse(savedSettings)
       : DEFAULT_SETTINGS;
+
+    // Ensure cancelledStatus has default value
+    settings.cancelledStatus = settings.cancelledStatus || "Cancelled";
 
     if (!settings.currentUser) {
       try {
@@ -102,6 +110,38 @@
     toInput.value = settings.completeStatusTo.join(",");
     toInput.style.cssText = userInput.style.cssText;
 
+    // Add Cancelled checkbox and input
+    const cancelledContainer = document.createElement("div");
+    cancelledContainer.style.marginTop = "10px";
+
+    const cancelledCheck = document.createElement("input");
+    cancelledCheck.type = "checkbox";
+    cancelledCheck.id = "include-cancelled";
+    cancelledCheck.checked = settings.includeCancelled;
+    cancelledCheck.style.marginRight = "5px";
+
+    const cancelledLabel = document.createElement("label");
+    cancelledLabel.htmlFor = "include-cancelled";
+    cancelledLabel.textContent = "Include Cancelled Status";
+    cancelledLabel.style.fontSize = "12px";
+
+    const cancelledInput = document.createElement("input");
+    cancelledInput.type = "text";
+    cancelledInput.value = settings.cancelledStatus || "Cancelled";
+    cancelledInput.style.cssText = userInput.style.cssText;
+    cancelledInput.style.marginTop = "5px";
+    cancelledInput.style.display = settings.includeCancelled ? "block" : "none";
+    cancelledInput.placeholder = "Cancelled status name";
+
+    // Handle checkbox change
+    cancelledCheck.onchange = () => {
+      cancelledInput.style.display = cancelledCheck.checked ? "block" : "none";
+    };
+
+    cancelledContainer.appendChild(cancelledCheck);
+    cancelledContainer.appendChild(cancelledLabel);
+    cancelledContainer.appendChild(cancelledInput);
+
     // In Progress Statuses
     const inProgressLabel = document.createElement("label");
     inProgressLabel.textContent = "In Progress Statuses (comma-separated):";
@@ -132,6 +172,8 @@
         currentUser: userInput.value,
         completeStatusTo: toInput.value.split(",").map((s) => s.trim()),
         inProgress: inProgressInput.value.split(",").map((s) => s.trim()),
+        includeCancelled: cancelledCheck.checked,
+        cancelledStatus: cancelledInput.value.trim(),
       };
       saveSettings(newSettings);
       // Show success message
@@ -146,6 +188,7 @@
     container.appendChild(userInput);
     container.appendChild(toLabel);
     container.appendChild(toInput);
+    container.appendChild(cancelledContainer);
     container.appendChild(inProgressLabel);
     container.appendChild(inProgressInput);
     container.appendChild(saveButton);
@@ -737,9 +780,14 @@
 
   // Get JQL query based on week selection
   function getJqlQuery(weekType) {
+    let statusList = [...settings.completeStatusTo];
+    if (settings.includeCancelled && settings.cancelledStatus) {
+      statusList.push(settings.cancelledStatus);
+    }
+
     const baseQuery =
       'assignee WAS currentUser() AND status changed TO ("' +
-      settings.completeStatusTo.join('", "') +
+      statusList.join('", "') +
       '")';
 
     const notInProgress =
@@ -1095,7 +1143,12 @@
     const content = statsBox.querySelector("#stats-content");
     content.setAttribute("data-type", "daily");
 
-    const baseQuery = `assignee WAS currentUser() AND status changed TO ("${settings.completeStatusTo.join(
+    let statusList = [...settings.completeStatusTo];
+    if (settings.includeCancelled && settings.cancelledStatus) {
+      statusList.push(settings.cancelledStatus);
+    }
+
+    const baseQuery = `assignee WAS currentUser() AND status changed TO ("${statusList.join(
       '", "'
     )}")`;
     const notInProgress =
