@@ -1,14 +1,18 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.5.1
+// @version      0.6.0
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
-// @changelog    0.5.1 (2024-03-19)
+// @changelog    0.6.0 (2024-03-19)
+//              - Add verification of status change author
+//              - Only count tickets where status was changed by current user
+//              - Fix incorrect ticket counting in weekly stats
+//              0.5.1 (2024-03-19)
 //              - Add option to include cancelled tickets in statistics
 //              - Fix undefined cancelled status in settings
 //              0.5.0 (2024-03-19)
@@ -641,34 +645,62 @@
       const key = item.getElementsByTagName("key")[0].textContent;
       console.log(`\nProcessing ticket ${key}:`);
 
-      const type = item.getElementsByTagName("type")[0].textContent;
-      const status = item.getElementsByTagName("status")[0].textContent;
-      const created = new Date(
-        item.getElementsByTagName("created")[0].textContent
-      );
-      const summary = item.getElementsByTagName("summary")[0].textContent;
+      try {
+        const changelog = await fetchChangelog(key);
+        console.log(`Changelog for ${key}:`, changelog);
 
-      // Get story points
-      let points = 0;
-      const customfields = item.getElementsByTagName("customfield");
-      for (let field of customfields) {
-        if (
-          field.getAttribute("key") ===
-          "com.atlassian.jira.plugin.system.customfieldtypes:float"
-        ) {
-          const values = field.getElementsByTagName("customfieldvalue");
-          if (values && values.length > 0) {
-            points = parseFloat(values[0].textContent) || 0;
+        // Find status changes to our target statuses
+        const validStatusChange = changelog.values.find((change) => {
+          return (
+            change.items.some((item) => {
+              return (
+                item.field === "status" &&
+                settings.completeStatusTo.includes(item.toString) &&
+                change.author.displayName === settings.currentUser
+              );
+            }) ||
+            (settings.includeCancelled &&
+              change.items.some(
+                (item) =>
+                  item.field === "status" &&
+                  item.toString === settings.cancelledStatus &&
+                  change.author.displayName === settings.currentUser
+              ))
+          );
+        });
+
+        // Skip this ticket if no valid status change found
+        if (!validStatusChange) {
+          console.log(
+            `${key}: No valid status change by ${settings.currentUser} found`
+          );
+          continue;
+        }
+
+        const type = item.getElementsByTagName("type")[0].textContent;
+        const status = item.getElementsByTagName("status")[0].textContent;
+        const created = new Date(
+          item.getElementsByTagName("created")[0].textContent
+        );
+        const summary = item.getElementsByTagName("summary")[0].textContent;
+
+        // Get story points
+        let points = 0;
+        const customfields = item.getElementsByTagName("customfield");
+        for (let field of customfields) {
+          if (
+            field.getAttribute("key") ===
+            "com.atlassian.jira.plugin.system.customfieldtypes:float"
+          ) {
+            const values = field.getElementsByTagName("customfieldvalue");
+            if (values && values.length > 0) {
+              points = parseFloat(values[0].textContent) || 0;
+            }
           }
         }
-      }
 
-      // Only process changelog for weekly stats
-      if (weekType !== "daily") {
-        try {
-          const changelog = await fetchChangelog(key);
-          console.log(`Changelog for ${key}:`, changelog);
-
+        // For weekly stats, check if it's carryover or new
+        if (weekType !== "daily") {
           const assignmentChange = changelog.values.find((change) =>
             change.items.some(
               (item) =>
@@ -691,31 +723,26 @@
             } else if (assignmentDate < weekBoundaries.end) {
               console.log(`${key} is a new ticket`);
               stats.newTickets++;
-            } else {
-              console.log(`${key} assignment date is outside the week range`);
             }
-          } else {
-            console.log(
-              `No assignment found for ${key} to ${settings.currentUser}`
-            );
           }
-        } catch (error) {
-          console.error(`Error fetching changelog for ${key}:`, error);
         }
-      }
 
-      const ticketInfo = { key, type, status, points, created, summary };
-      stats.tickets.push(ticketInfo);
+        const ticketInfo = { key, type, status, points, created, summary };
+        stats.tickets.push(ticketInfo);
 
-      // Add points - all tickets in results are completed
-      stats.totalPoints += points;
-      stats.completedPoints += points; // All tickets are completed
+        // Add points - all tickets in results are completed
+        stats.totalPoints += points;
+        stats.completedPoints += points; // All tickets are completed
 
-      // Count by type
-      if (type === "Bug") {
-        stats.bugs++;
-      } else {
-        stats.userStories++;
+        // Count by type
+        if (type === "Bug") {
+          stats.bugs++;
+        } else {
+          stats.userStories++;
+        }
+        stats.completed = stats.tickets.length; // Update completed count based on valid tickets
+      } catch (error) {
+        console.error(`Error processing changelog for ${key}:`, error);
       }
     }
 
@@ -789,7 +816,6 @@
       'assignee WAS currentUser() AND status changed TO ("' +
       statusList.join('", "') +
       '")';
-
     const notInProgress =
       ' AND status NOT IN ("' + settings.inProgress.join('", "') + '")';
 
