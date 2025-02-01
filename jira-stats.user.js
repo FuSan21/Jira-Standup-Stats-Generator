@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.7.1
+// @version      0.7.2
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -814,9 +814,9 @@
                 ${stats.tickets
                   .map(
                     (t) =>
-                      `<li title="${t.summary}">${t.key} (${t.type}) [${
-                        t.priority
-                      }] - ${t.status}${
+                      `<li title="${encodeHTMLEntities(t.summary)}">${t.key} (${
+                        t.type
+                      }) [${t.priority}] - ${t.status}${
                         t.points ? ` [${t.points}pts]` : ""
                       }</li>`
                   )
@@ -1291,5 +1291,14 @@
   // Update the initialization to handle async loadSettings
   async function initializeSettings() {
     settings = await loadSettings();
+  }
+
+  function encodeHTMLEntities(text) {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
   }
 })();
