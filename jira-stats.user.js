@@ -1,14 +1,16 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.6.0
+// @version      0.6.1
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
-// @changelog    0.6.0 (2024-03-19)
+// @changelog    0.6.1 (2024-03-19)
+//              - Improve settings UI behavior: auto-close after saving
+//              0.6.0 (2024-03-19)
 //              - Add verification of status change author
 //              - Only count tickets where status was changed by current user
 //              - Fix incorrect ticket counting in weekly stats
@@ -183,8 +185,16 @@
       // Show success message
       const originalText = saveButton.textContent;
       saveButton.textContent = "Saved!";
+
+      const settingsContainer = container.parentElement;
+      const gearIcon = settingsContainer.parentElement.querySelector(
+        'button[title="Settings"]'
+      );
+
       setTimeout(() => {
         saveButton.textContent = originalText;
+        settingsContainer.remove();
+        gearIcon.style.color = "";
       }, 1000);
     };
 
