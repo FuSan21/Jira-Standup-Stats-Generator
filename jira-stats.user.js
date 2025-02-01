@@ -1,29 +1,13 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.6.1
+// @version      0.7.0
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
-// @changelog    0.6.1 (2024-03-19)
-//              - Improve settings UI behavior: auto-close after saving
-//              0.6.0 (2024-03-19)
-//              - Add verification of status change author
-//              - Only count tickets where status was changed by current user
-//              - Fix incorrect ticket counting in weekly stats
-//              0.5.1 (2024-03-19)
-//              - Add option to include cancelled tickets in statistics
-//              - Fix undefined cancelled status in settings
-//              0.5.0 (2024-03-19)
-//              - Add automatic current user detection using JIRA API
-//              - Add support for multiple completion statuses
-//              - Remove "Complete Status From" field
-//              - Improve JQL query format for multiple statuses
-//              0.4.1 (Previous version)
-//              - Initial stable version
 // ==/UserScript==
 
 (function () {
@@ -36,6 +20,7 @@
     inProgress: ["In Progress", "Ready For Work"],
     includeCancelled: false,
     cancelledStatus: "Cancelled",
+    timezone: "America/New_York",
   };
 
   // Load settings from local storage or use defaults
@@ -51,10 +36,11 @@
     // Ensure cancelledStatus has default value
     settings.cancelledStatus = settings.cancelledStatus || "Cancelled";
 
-    if (!settings.currentUser) {
+    if (!settings.currentUser || !settings.timezone) {
       try {
-        settings.currentUser = await fetchCurrentUser();
-        // Save the settings with the fetched username
+        const userData = await fetchCurrentUser();
+        settings.currentUser = userData.displayName;
+        settings.timezone = userData.timezone;
         localStorage.setItem("jiraStatsSettings", JSON.stringify(settings));
       } catch (error) {
         console.error("Error fetching current user:", error);
@@ -180,6 +166,7 @@
         inProgress: inProgressInput.value.split(",").map((s) => s.trim()),
         includeCancelled: cancelledCheck.checked,
         cancelledStatus: cancelledInput.value.trim(),
+        timezone: settings.timezone,
       };
       saveSettings(newSettings);
       // Show success message
@@ -584,13 +571,21 @@
     });
   }
 
-  // Add helper function to get week boundaries
-  function getWeekBoundaries(weekType) {
-    const now = new Date();
-    const currentDay = now.getDay(); // Sunday = 0, Monday = 1, etc.
+  // Add helper function to convert UTC to user's timezone
+  function convertToUserTimezone(date) {
+    const userTimezone = settings.timezone || "America/New_York"; // Default to ET if not set
+    return new Date(date).toLocaleString("en-US", { timeZone: userTimezone });
+  }
 
-    // Get to the start of current week (Sunday)
-    const sundayOffset = -currentDay; // No special case needed since Sunday is 0
+  // Update getWeekBoundaries function
+  function getWeekBoundaries(weekType) {
+    const userTimezone = settings.timezone || "America/New_York";
+    const now = new Date(
+      new Date().toLocaleString("en-US", { timeZone: userTimezone })
+    );
+    const currentDay = now.getDay();
+
+    const sundayOffset = -currentDay;
     const currentWeekSunday = new Date(now);
     currentWeekSunday.setDate(now.getDate() + sundayOffset);
     currentWeekSunday.setHours(0, 0, 0, 0);
@@ -612,11 +607,11 @@
 
     console.log("Week boundaries:", {
       weekType,
-      startDate: targetStart.toLocaleDateString(),
-      endDate: targetEnd.toLocaleDateString(),
-      startDay: targetStart.toLocaleDateString("en-US", { weekday: "long" }),
-      endDay: targetEnd.toLocaleDateString("en-US", { weekday: "long" }),
-      isSunday: currentDay === 0,
+      startDate: targetStart.toLocaleString("en-US", {
+        timeZone: userTimezone,
+      }),
+      endDate: targetEnd.toLocaleString("en-US", { timeZone: userTimezone }),
+      timezone: userTimezone,
     });
 
     return { start: targetStart, end: targetEnd };
@@ -720,11 +715,16 @@
           );
 
           if (assignmentChange) {
-            const assignmentDate = new Date(assignmentChange.created);
+            const assignmentDate = new Date(
+              convertToUserTimezone(assignmentChange.created)
+            );
             console.log(`Assignment details for ${key}:`, {
-              date: assignmentDate.toISOString(),
+              date: assignmentDate.toLocaleString("en-US", {
+                timeZone: settings.timezone,
+              }),
               beforeWeekStart: assignmentDate < weekBoundaries.start,
               beforeWeekEnd: assignmentDate < weekBoundaries.end,
+              timezone: settings.timezone,
             });
 
             if (assignmentDate < weekBoundaries.start) {
@@ -1264,7 +1264,10 @@
               );
             }
             const data = JSON.parse(response.responseText);
-            resolve(data.displayName);
+            resolve({
+              displayName: data.displayName,
+              timezone: data.timeZone,
+            });
           } catch (error) {
             reject(error);
           }
