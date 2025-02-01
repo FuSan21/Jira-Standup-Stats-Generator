@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.7.0
+// @version      0.7.1
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -688,6 +688,7 @@
           item.getElementsByTagName("created")[0].textContent
         );
         const summary = item.getElementsByTagName("summary")[0].textContent;
+        const priority = item.getElementsByTagName("priority")[0].textContent;
 
         // Get story points
         let points = 0;
@@ -737,7 +738,15 @@
           }
         }
 
-        const ticketInfo = { key, type, status, points, created, summary };
+        const ticketInfo = {
+          key,
+          type,
+          status,
+          points,
+          created,
+          summary,
+          priority,
+        };
         stats.tickets.push(ticketInfo);
 
         // Add points - all tickets in results are completed
@@ -805,9 +814,11 @@
                 ${stats.tickets
                   .map(
                     (t) =>
-                      `<li title="${t.summary}">${t.key} (${t.type}) - ${
-                        t.status
-                      }${t.points ? ` [${t.points}pts]` : ""}</li>`
+                      `<li title="${t.summary}">${t.key} (${t.type}) [${
+                        t.priority
+                      }] - ${t.status}${
+                        t.points ? ` [${t.points}pts]` : ""
+                      }</li>`
                   )
                   .join("")}
             </ul>
@@ -1137,7 +1148,7 @@
     text += "\n- Blocked Tickets: 0\n";
     text += "- Priority Level /Blocker Impact: N/A\n";
 
-    // Add tickets list
+    // Add tickets list with priority
     text += "\nTickets:\n";
     content
       .querySelector("#tickets-list")
