@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.7.3
+// @version      0.8.0
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -624,7 +624,89 @@
     return { start: targetStart, end: targetEnd };
   }
 
-  // Update processXMLData function
+  function processTicketInfo(item, stats, weekType, weekBoundaries, changelog) {
+    const type = item.getElementsByTagName("type")[0].textContent;
+    const created = new Date(
+      item.getElementsByTagName("created")[0].textContent
+    );
+    const summary = item.getElementsByTagName("summary")[0].textContent;
+    const priority = item.getElementsByTagName("priority")[0].textContent;
+    const status = item.getElementsByTagName("status")[0].textContent;
+
+    // Get story points
+    let points = 0;
+    const customfields = item.getElementsByTagName("customfield");
+    for (let field of customfields) {
+      if (
+        field.getAttribute("key") ===
+        "com.atlassian.jira.plugin.system.customfieldtypes:float"
+      ) {
+        const values = field.getElementsByTagName("customfieldvalue");
+        if (values && values.length > 0) {
+          points = parseFloat(values[0].textContent) || 0;
+        }
+      }
+    }
+
+    // Process weekly stats if needed
+    if (weekType !== "daily" && changelog) {
+      const assignmentChange = changelog.values.find((change) =>
+        change.items.some(
+          (item) =>
+            item.field === "assignee" && item.toString === settings.currentUser
+        )
+      );
+
+      if (assignmentChange) {
+        const assignmentDate = new Date(
+          convertToUserTimezone(assignmentChange.created)
+        );
+        console.log(
+          `Assignment details for ${
+            item.getElementsByTagName("key")[0].textContent
+          }:`,
+          {
+            date: assignmentDate.toLocaleString("en-US", {
+              timeZone: settings.timezone,
+            }),
+            beforeWeekStart: assignmentDate < weekBoundaries.start,
+            beforeWeekEnd: assignmentDate < weekBoundaries.end,
+            timezone: settings.timezone,
+          }
+        );
+
+        if (assignmentDate < weekBoundaries.start) {
+          console.log(
+            `${
+              item.getElementsByTagName("key")[0].textContent
+            } is a carryover ticket`
+          );
+          stats.carryover++;
+        } else if (assignmentDate < weekBoundaries.end) {
+          console.log(
+            `${item.getElementsByTagName("key")[0].textContent} is a new ticket`
+          );
+          stats.newTickets++;
+        }
+      }
+    }
+
+    const ticketInfo = {
+      key: item.getElementsByTagName("key")[0].textContent,
+      type,
+      status,
+      points,
+      created,
+      summary,
+      priority,
+    };
+    stats.tickets.push(ticketInfo);
+    stats.totalPoints += points;
+    stats.completedPoints += points;
+    if (type === "Bug") stats.bugs++;
+    else stats.userStories++;
+  }
+
   async function processXMLData(xmlText, weekType = "current") {
     console.log(`Processing XML data for week type: ${weekType}`);
     const parser = new DOMParser();
@@ -642,7 +724,6 @@
       completedPoints: 0,
     };
 
-    // Skip week boundaries calculation for daily stats
     const weekBoundaries =
       weekType === "daily" ? null : getWeekBoundaries(weekType);
     if (weekBoundaries) {
@@ -652,36 +733,30 @@
       });
     }
 
-    // Process each item
     for (let item of items) {
       const key = item.getElementsByTagName("key")[0].textContent;
+      const status = item.getElementsByTagName("status")[0].textContent;
       console.log(`\nProcessing ticket ${key}:`);
+
+      if (settings.includeCancelled && status === settings.cancelledStatus) {
+        processTicketInfo(item, stats, weekType, weekBoundaries, null);
+        continue;
+      }
 
       try {
         const changelog = await fetchChangelog(key);
         console.log(`Changelog for ${key}:`, changelog);
 
-        // Find status changes to our target statuses
         const validStatusChange = changelog.values.find((change) => {
-          return (
-            change.items.some((item) => {
-              return (
-                item.field === "status" &&
-                settings.completeStatusTo.includes(item.toString) &&
-                change.author.displayName === settings.currentUser
-              );
-            }) ||
-            (settings.includeCancelled &&
-              change.items.some(
-                (item) =>
-                  item.field === "status" &&
-                  item.toString === settings.cancelledStatus &&
-                  change.author.displayName === settings.currentUser
-              ))
-          );
+          return change.items.some((item) => {
+            return (
+              item.field === "status" &&
+              change.author.displayName === settings.currentUser &&
+              settings.completeStatusTo.includes(item.toString)
+            );
+          });
         });
 
-        // Skip this ticket if no valid status change found
         if (!validStatusChange) {
           console.log(
             `${key}: No valid status change by ${settings.currentUser} found`
@@ -689,89 +764,13 @@
           continue;
         }
 
-        const type = item.getElementsByTagName("type")[0].textContent;
-        const status = item.getElementsByTagName("status")[0].textContent;
-        const created = new Date(
-          item.getElementsByTagName("created")[0].textContent
-        );
-        const summary = item.getElementsByTagName("summary")[0].textContent;
-        const priority = item.getElementsByTagName("priority")[0].textContent;
-
-        // Get story points
-        let points = 0;
-        const customfields = item.getElementsByTagName("customfield");
-        for (let field of customfields) {
-          if (
-            field.getAttribute("key") ===
-            "com.atlassian.jira.plugin.system.customfieldtypes:float"
-          ) {
-            const values = field.getElementsByTagName("customfieldvalue");
-            if (values && values.length > 0) {
-              points = parseFloat(values[0].textContent) || 0;
-            }
-          }
-        }
-
-        // For weekly stats, check if it's carryover or new
-        if (weekType !== "daily") {
-          const assignmentChange = changelog.values.find((change) =>
-            change.items.some(
-              (item) =>
-                item.field === "assignee" &&
-                item.toString === settings.currentUser
-            )
-          );
-
-          if (assignmentChange) {
-            const assignmentDate = new Date(
-              convertToUserTimezone(assignmentChange.created)
-            );
-            console.log(`Assignment details for ${key}:`, {
-              date: assignmentDate.toLocaleString("en-US", {
-                timeZone: settings.timezone,
-              }),
-              beforeWeekStart: assignmentDate < weekBoundaries.start,
-              beforeWeekEnd: assignmentDate < weekBoundaries.end,
-              timezone: settings.timezone,
-            });
-
-            if (assignmentDate < weekBoundaries.start) {
-              console.log(`${key} is a carryover ticket`);
-              stats.carryover++;
-            } else if (assignmentDate < weekBoundaries.end) {
-              console.log(`${key} is a new ticket`);
-              stats.newTickets++;
-            }
-          }
-        }
-
-        const ticketInfo = {
-          key,
-          type,
-          status,
-          points,
-          created,
-          summary,
-          priority,
-        };
-        stats.tickets.push(ticketInfo);
-
-        // Add points - all tickets in results are completed
-        stats.totalPoints += points;
-        stats.completedPoints += points; // All tickets are completed
-
-        // Count by type
-        if (type === "Bug") {
-          stats.bugs++;
-        } else {
-          stats.userStories++;
-        }
-        stats.completed = stats.tickets.length; // Update completed count based on valid tickets
+        processTicketInfo(item, stats, weekType, weekBoundaries, changelog);
       } catch (error) {
         console.error(`Error processing changelog for ${key}:`, error);
       }
     }
 
+    stats.completed = stats.tickets.length;
     console.log("\nFinal stats:", stats);
     return stats;
   }
