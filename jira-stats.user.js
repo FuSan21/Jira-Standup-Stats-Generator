@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.7.2
+// @version      0.7.3
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -24,17 +24,24 @@
   };
 
   // Load settings from local storage or use defaults
-  let settings = null; // Initialize settings as null
+  let settings = null;
 
-  // Functions to handle settings
   async function loadSettings() {
     const savedSettings = localStorage.getItem("jiraStatsSettings");
-    const settings = savedSettings
-      ? JSON.parse(savedSettings)
-      : DEFAULT_SETTINGS;
+    let settings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS;
 
-    // Ensure cancelledStatus has default value
-    settings.cancelledStatus = settings.cancelledStatus || "Cancelled";
+    settings.completeStatusTo = Array.isArray(settings.completeStatusTo)
+      ? settings.completeStatusTo
+      : DEFAULT_SETTINGS.completeStatusTo;
+
+    settings.inProgress = Array.isArray(settings.inProgress)
+      ? settings.inProgress
+      : DEFAULT_SETTINGS.inProgress;
+
+    settings.cancelledStatus =
+      settings.cancelledStatus || DEFAULT_SETTINGS.cancelledStatus;
+    settings.includeCancelled =
+      settings.includeCancelled ?? DEFAULT_SETTINGS.includeCancelled;
 
     if (!settings.currentUser || !settings.timezone) {
       try {
