@@ -24,6 +24,7 @@
     storyPointsField: "customfield_10034",
     savedProjects: [],
     boardToProjectMap: {},
+    AgtProjectNameMapping: {},
   };
 
   const INJECTION_POINTS = {
@@ -249,14 +250,46 @@
 
   // Helper function to find board config for a ticket
   function findBoardConfigForTicket(ticket) {
-    const matchingBoard = settings.savedBoards.find(
-      (board) => ticket.projectName === board.name
-    );
+    // Find all boards that match the project name
+    const matchingBoards = settings.savedBoards.filter((board) => {
+      const boardProjectName = settings.boardToProjectMap[board.name];
+      return ticket.projectName === boardProjectName;
+    });
 
-    if (matchingBoard) {
-      return settings.boardConfigs[matchingBoard.id];
+    if (!matchingBoards.length) return null;
+
+    // If only one board, return its config
+    if (matchingBoards.length === 1) {
+      return settings.boardConfigs[matchingBoards[0].id];
     }
-    return null;
+
+    // Merge configs from all matching boards
+    const mergedConfig = {
+      inProgress: [],
+      inQA: [],
+      done: [],
+      cancelled: [],
+    };
+
+    matchingBoards.forEach((board) => {
+      const boardConfig = settings.boardConfigs[board.id];
+      if (!boardConfig) return;
+
+      // Merge each status category
+      Object.keys(mergedConfig).forEach((category) => {
+        if (boardConfig[category]) {
+          mergedConfig[category] = [
+            ...new Set([...mergedConfig[category], ...boardConfig[category]]),
+          ];
+        }
+      });
+    });
+
+    // Only return merged config if it has any statuses
+    const hasStatuses = Object.values(mergedConfig).some(
+      (arr) => arr.length > 0
+    );
+    return hasStatuses ? mergedConfig : null;
   }
 
   // Helper function to map ticket status based on board config
@@ -978,6 +1011,8 @@
       settings.savedProjects || DEFAULT_SETTINGS.savedProjects;
     settings.boardToProjectMap =
       settings.boardToProjectMap || DEFAULT_SETTINGS.boardToProjectMap;
+    settings.AgtProjectNameMapping =
+      settings.AgtProjectNameMapping || DEFAULT_SETTINGS.AgtProjectNameMapping;
 
     if (!settings.currentUser || !settings.timezone) {
       try {
@@ -1202,6 +1237,9 @@
     // Add story points configuration
     container.appendChild(createStoryPointsSection());
 
+    // Add projects section first
+    container.appendChild(createProjectsSection());
+
     // Add boards section
     container.appendChild(createBoardsSection());
 
@@ -1288,6 +1326,138 @@
 
     section.appendChild(apiKeyLabel);
     section.appendChild(apiKeyContainer);
+
+    return section;
+  }
+
+  function createProjectsSection() {
+    const section = document.createElement("div");
+    section.style.cssText = `
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+    `;
+
+    const header = document.createElement("h4");
+    header.textContent = "Manage Projects";
+    header.style.marginBottom = "15px";
+    section.appendChild(header);
+
+    const table = document.createElement("table");
+    table.style.cssText = `
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    `;
+
+    // Create table header with new AGT column
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    headerRow.style.cssText = `
+        background: #f4f5f7;
+        font-weight: 500;
+    `;
+
+    ["Project Name", "Associated Boards", "AGT Project Name"].forEach(
+      (text) => {
+        const th = document.createElement("th");
+        th.textContent = text;
+        th.style.cssText = `
+            padding: 8px;
+            text-align: left;
+            border-bottom: 2px solid #ddd;
+        `;
+        headerRow.appendChild(th);
+      }
+    );
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Create table body
+    const tbody = document.createElement("tbody");
+
+    // Initialize AgtProjectNameMapping in settings if it doesn't exist
+    if (!settings.AgtProjectNameMapping) {
+      settings.AgtProjectNameMapping = {};
+    }
+
+    // Group boards by project
+    const projectBoards = {};
+    for (const [boardName, projectName] of Object.entries(
+      settings.boardToProjectMap
+    )) {
+      if (!projectBoards[projectName]) {
+        projectBoards[projectName] = [];
+      }
+      projectBoards[projectName].push(boardName);
+    }
+
+    // Create rows for each project
+    Object.entries(projectBoards).forEach(([projectName, boards]) => {
+      const row = document.createElement("tr");
+      row.style.cssText = `
+            border-bottom: 1px solid #eee;
+        `;
+
+      // Project name cell
+      const projectCell = document.createElement("td");
+      projectCell.textContent = projectName;
+      projectCell.style.padding = "8px";
+
+      // Associated boards cell
+      const boardsCell = document.createElement("td");
+      boardsCell.style.padding = "8px";
+
+      // Create pills for each board
+      const boardsList = document.createElement("div");
+      boardsList.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        `;
+
+      boards.forEach((boardName) => {
+        const pill = document.createElement("span");
+        pill.textContent = boardName;
+        pill.style.cssText = `
+                background: #ebecf0;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                color: #42526e;
+            `;
+        boardsList.appendChild(pill);
+      });
+
+      boardsCell.appendChild(boardsList);
+
+      // AGT Project Name cell with input field
+      const agtCell = document.createElement("td");
+      agtCell.style.padding = "8px";
+
+      const agtInput = document.createElement("input");
+      agtInput.type = "text";
+      agtInput.value = settings.AgtProjectNameMapping[projectName] || "";
+      agtInput.placeholder = "Enter AGT project name";
+      agtInput.dataset.projectName = projectName; // Store project name for saving
+      agtInput.style.cssText = `
+            width: 100%;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 12px;
+        `;
+      agtCell.appendChild(agtInput);
+
+      row.appendChild(projectCell);
+      row.appendChild(boardsCell);
+      row.appendChild(agtCell);
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    section.appendChild(table);
 
     return section;
   }
@@ -1467,12 +1637,20 @@
       const userInput = container.querySelector('input[type="text"]');
       const apiKeyInput = container.querySelector("#settings-api-key");
       const storyPointsField = container.querySelector("#story-points-field");
+      const agtProjectNameMapping = {};
+      const agtInputs = container.querySelectorAll("input[data-project-name]");
+      agtInputs.forEach((input) => {
+        if (input.value.trim()) {
+          agtProjectNameMapping[input.dataset.projectName] = input.value.trim();
+        }
+      });
 
       const newSettings = {
         ...settings,
         currentUser: userInput.value,
         apiKey: apiKeyInput.value,
         storyPointsField: storyPointsField.value || "customfield_10034",
+        AgtProjectNameMapping: agtProjectNameMapping,
       };
 
       saveSettings(newSettings);
