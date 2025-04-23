@@ -23,6 +23,7 @@
     boardConfigs: {},
     savedTickets: [],
     storyPointsField: "customfield_10034",
+    savedProjects: [],
   };
 
   const INJECTION_POINTS = {
@@ -142,6 +143,20 @@
                 `HTTP ${response.status}: ${response.statusText}`
               );
             const data = JSON.parse(response.responseText);
+
+            // Extract unique project names from the boards
+            const projectNames = new Set();
+            data.values.forEach((board) => {
+              if (board.location && board.location.projectName) {
+                projectNames.add(board.location.projectName);
+              }
+            });
+
+            // Update settings with unique project names
+            settings.savedProjects = Array.from(projectNames);
+            console.log("Unique project names:", settings.savedProjects);
+            saveSettings(settings);
+
             resolve(data.values);
           } catch (error) {
             reject(error);
@@ -961,6 +976,8 @@
     settings.apiKey = settings.apiKey || DEFAULT_SETTINGS.apiKey;
     settings.storyPointsField =
       settings.storyPointsField || DEFAULT_SETTINGS.storyPointsField;
+    settings.savedProjects =
+      settings.savedProjects || DEFAULT_SETTINGS.savedProjects;
 
     if (!settings.currentUser || !settings.timezone) {
       try {
