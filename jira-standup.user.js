@@ -322,7 +322,7 @@
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: "PATCH",
-        url: `https://allgentexch.io/api/employee/tickets/${ticketId}`,
+        url: `https://allgentechx.io/api/employee/tickets/${ticketId}`,
         headers: {
           "Content-Type": "application/json",
           "x-api-key": settings.apiKey || "",
@@ -380,7 +380,7 @@
             fetchedId: fetchedTicket._id,
             savedTicket: savedTicket,
             fetchedTicket: fetchedTicket,
-            mappedStatus: mappedSavedStatus, // Include mapped status for update
+            mappedStatus: mappedSavedStatus,
           });
         }
       });
@@ -393,24 +393,42 @@
       const results = [];
       for (const update of updatesNeeded) {
         try {
+          // Get mapped project name from settings
+          const mappedProjectName =
+            settings.AgtProjectNameMapping[update.savedTicket.projectName] ||
+            update.savedTicket.projectName;
+
+          const today = new Date();
+          const estDate = new Date(
+            today.toLocaleString("en-US", { timeZone: "America/New_York" })
+          );
+          const dateStr = estDate.toISOString().split("T")[0];
+
           const updateData = {
             name: update.savedTicket.id,
             status: update.mappedStatus,
             storyPoints: update.savedTicket.storyPoints || 0,
-            projectName: update.savedTicket.projectName,
+            projectName: mappedProjectName,
             ticketType: update.savedTicket.ticketType,
             story: update.savedTicket.story || "",
+            updatedAt: dateStr,
           };
 
           console.log(
             `Updating ticket ${update.fetchedId} status to: ${updateData.status}`
           );
+          console.log(
+            `Project mapping: ${update.savedTicket.projectName} → ${mappedProjectName}`
+          );
+
           const result = await updateTicketStatus(update.fetchedId, updateData);
           results.push({
             ticketId: update.savedTicket.id,
             success: true,
             oldStatus: update.fetchedTicket.status,
             newStatus: updateData.status,
+            projectName: mappedProjectName,
+            updatedAt: dateStr,
           });
         } catch (error) {
           console.error(
@@ -444,7 +462,7 @@
       name: data.fields.summary,
       storyPoints: data.fields[settings.storyPointsField] || 0,
       status: data.fields.status.name,
-      story: data.fields.description || "",
+      story: "",
       projectName: data.fields.project.name,
       ticketType: data.fields.issuetype.name,
     };
