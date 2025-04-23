@@ -19,6 +19,7 @@
     apiKey: "",
     timezone: "America/New_York",
     savedBoards: [],
+    savedBoardsName: {},
     boardConfigs: {},
     savedTickets: [],
     storyPointsField: "customfield_10034",
@@ -380,7 +381,7 @@
     };
 
     const syncButton = document.createElement("button");
-    syncButton.textContent = "🔄 Sync Stats";
+    syncButton.textContent = "🔄📥 Pull Tickets";
     syncButton.style.cssText = `
                   padding: 5px 10px;
                   background: #EBECF0;
@@ -393,7 +394,7 @@
     syncButton.onclick = async () => {
       try {
         syncButton.disabled = true;
-        syncButton.textContent = "Syncing...";
+        syncButton.textContent = "Pulling...";
 
         const data = await fetchIncompleteTickets();
         console.log("Fetched tickets:", data.tickets);
@@ -412,14 +413,14 @@
         console.log("Merged tickets:", mergedTickets);
         syncButton.textContent = "✓ Synced";
         setTimeout(() => {
-          syncButton.textContent = "🔄 Sync Stats";
+          syncButton.textContent = "🔄📥 Pull Tickets";
           syncButton.disabled = false;
         }, 2000);
       } catch (error) {
         console.error("Error syncing tickets:", error);
         syncButton.textContent = "× Error";
         setTimeout(() => {
-          syncButton.textContent = "🔄 Sync Stats";
+          syncButton.textContent = "🔄📥 Pull Tickets";
           syncButton.disabled = false;
         }, 2000);
       }
@@ -730,6 +731,13 @@
     settings.savedBoards = settings.savedBoards || DEFAULT_SETTINGS.savedBoards;
     settings.boardConfigs =
       settings.boardConfigs || DEFAULT_SETTINGS.boardConfigs;
+    settings.savedTickets =
+      settings.savedTickets || DEFAULT_SETTINGS.savedTickets;
+    settings.savedBoardsName =
+      settings.savedBoardsName || DEFAULT_SETTINGS.savedBoardsName;
+    settings.apiKey = settings.apiKey || DEFAULT_SETTINGS.apiKey;
+    settings.storyPointsField =
+      settings.storyPointsField || DEFAULT_SETTINGS.storyPointsField;
 
     if (!settings.currentUser || !settings.timezone) {
       try {
@@ -741,8 +749,6 @@
         console.error("Error fetching current user:", error);
       }
     }
-
-    settings.apiKey = settings.apiKey || DEFAULT_SETTINGS.apiKey;
 
     return settings;
   }
@@ -1103,12 +1109,13 @@
         justify-content: space-between;
         padding: 8px;
         border-bottom: 1px solid #eee;
-      `;
+    `;
 
     // Left section with checkbox and name
     const leftSection = document.createElement("div");
     leftSection.style.display = "flex";
     leftSection.style.alignItems = "center";
+    leftSection.style.flexGrow = "1";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -1117,27 +1124,71 @@
       (saved) => saved.id === board.id
     );
 
+    const name = document.createElement("span");
+    name.textContent = board.name;
+    name.style.cssText = `
+        font-size: 14px;
+        margin-right: 12px;
+        flex-grow: 1;
+    `;
+
+    // Add short name input field
+    const shortNameContainer = document.createElement("div");
+    shortNameContainer.style.cssText = `
+        display: none;
+        margin-right: 12px;
+    `;
+
+    const shortNameInput = document.createElement("input");
+    shortNameInput.type = "text";
+    shortNameInput.placeholder = "Short name";
+    shortNameInput.value = settings.savedBoardsName[board.id] || "";
+    shortNameInput.style.cssText = `
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        font-size: 12px;
+        width: 100px;
+    `;
+
+    // Show/hide short name input based on checkbox
     checkbox.onchange = () => {
       if (checkbox.checked) {
         settings.savedBoards.push({
           id: board.id,
           name: board.name,
         });
+        shortNameContainer.style.display = "block";
       } else {
         settings.savedBoards = settings.savedBoards.filter(
           (saved) => saved.id !== board.id
         );
+        // Remove from savedBoardsName when unchecked
+        delete settings.savedBoardsName[board.id];
+        shortNameContainer.style.display = "none";
+        shortNameInput.value = "";
       }
     };
 
-    const name = document.createElement("span");
-    name.textContent = board.name;
-    name.style.fontSize = "14px";
+    // If board is already checked, show the short name input
+    if (checkbox.checked) {
+      shortNameContainer.style.display = "block";
+    }
 
+    shortNameInput.onchange = () => {
+      if (shortNameInput.value.trim()) {
+        settings.savedBoardsName[board.id] = shortNameInput.value.trim();
+      } else {
+        delete settings.savedBoardsName[board.id];
+      }
+    };
+
+    shortNameContainer.appendChild(shortNameInput);
     leftSection.appendChild(checkbox);
     leftSection.appendChild(name);
+    leftSection.appendChild(shortNameContainer);
 
-    // Configure button
+    // Configure button (right section)
     const configButton = document.createElement("button");
     configButton.innerHTML = "⚙️";
     configButton.title = "Configure Columns";
@@ -1148,8 +1199,9 @@
         opacity: 0.7;
         padding: 4px 8px;
         font-size: 14px;
-      `;
+    `;
 
+    // Rest of the existing configButton code...
     configButton.onclick = async () => {
       try {
         configButton.style.opacity = "0.3";
@@ -1215,7 +1267,6 @@
     saveButton.onclick = () => {
       const userInput = container.querySelector('input[type="text"]');
       const apiKeyInput = container.querySelector("#settings-api-key");
-      const cancelledCheck = container.querySelector("#include-cancelled");
       const storyPointsField = container.querySelector("#story-points-field");
 
       const newSettings = {
