@@ -212,6 +212,25 @@
           try {
             if (response.status === 200) {
               const data = JSON.parse(response.responseText);
+
+              // Map status for each ticket based on boardConfigs
+              data.tickets = data.tickets.map((ticket) => {
+                // Find the board config for this ticket's project
+                const boardConfig = findBoardConfigForTicket(ticket);
+                if (boardConfig) {
+                  // Map the status based on board configuration
+                  const mappedStatus = mapTicketStatus(
+                    ticket.status,
+                    boardConfig
+                  );
+                  return {
+                    ...ticket,
+                    status: mappedStatus,
+                  };
+                }
+                return ticket;
+              });
+
               resolve(data);
             } else {
               reject(
@@ -225,6 +244,153 @@
         onerror: reject,
       });
     });
+  }
+
+  // Helper function to find board config for a ticket
+  function findBoardConfigForTicket(ticket) {
+    // Find the board that matches the ticket's project
+    const matchingBoard = settings.savedBoards.find((board) => {
+      const shortName = settings.savedBoardsName[board.id];
+      // Match either by board's short name or full name
+      return (
+        ticket.projectName === shortName || ticket.projectName === board.name
+      );
+    });
+
+    if (matchingBoard) {
+      return settings.boardConfigs[matchingBoard.id];
+    }
+    return null;
+  }
+
+  // Helper function to map ticket status based on board config
+  function mapTicketStatus(currentStatus, boardConfig) {
+    // Check each category (inProgress, inQA, done, cancelled)
+    for (const [category, columns] of Object.entries(boardConfig)) {
+      if (columns.includes(currentStatus)) {
+        // Map to standardized status names
+        switch (category) {
+          case "inProgress":
+            return "In Progress";
+          case "inQA":
+            return "In QA";
+          case "done":
+            return "Done";
+          case "cancelled":
+            return "Cancelled";
+          default:
+            return currentStatus;
+        }
+      }
+    }
+
+    // If no mapping found, return original status
+    return currentStatus;
+  }
+
+  async function updateTicketStatus(ticketId, updateData) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "PATCH",
+        url: `https://allgentech.io/api/employee/tickets/${ticketId}`,
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": settings.apiKey || "",
+        },
+        data: JSON.stringify(updateData),
+        onload: function (response) {
+          if (response.status === 200) {
+            resolve(JSON.parse(response.responseText));
+          } else {
+            reject(
+              new Error(`HTTP ${response.status}: ${response.statusText}`)
+            );
+          }
+        },
+        onerror: reject,
+      });
+    });
+  }
+
+  // Add this function near other ticket management functions
+  async function pushTicketUpdates() {
+    try {
+      // First fetch current tickets from API
+      const data = await fetchIncompleteTickets();
+      const fetchedTickets = data.tickets;
+
+      // Create maps for easy lookup
+      const fetchedTicketsMap = new Map(fetchedTickets.map((t) => [t.name, t]));
+
+      const savedTicketsMap = new Map(
+        settings.savedTickets.map((t) => [t.id, t])
+      );
+
+      // Find tickets that need updating
+      const updatesNeeded = [];
+
+      fetchedTickets.forEach((fetchedTicket) => {
+        const savedTicket = savedTicketsMap.get(fetchedTicket.name);
+        if (savedTicket && savedTicket.status !== fetchedTicket.status) {
+          updatesNeeded.push({
+            fetchedId: fetchedTicket._id, // Use fetched ticket's ID for PATCH
+            savedTicket: savedTicket, // Use saved ticket's data for update
+            fetchedTicket: fetchedTicket, // Keep fetched data for reference
+          });
+        }
+      });
+
+      console.log(
+        `Found ${updatesNeeded.length} tickets that need status updates`
+      );
+
+      // Process updates sequentially
+      const results = [];
+      for (const update of updatesNeeded) {
+        try {
+          // Create merged ticket object using saved ticket's current data
+          const updateData = {
+            name: update.savedTicket.id, // JIRA ticket ID
+            status: update.savedTicket.status, // Current status from saved
+            storyPoints: update.savedTicket.storyPoints || 0,
+            projectName: update.savedTicket.projectName,
+            ticketType: update.savedTicket.ticketType,
+            story: update.savedTicket.story || "",
+          };
+
+          console.log(
+            `Updating ticket ${update.fetchedId} status to: ${updateData.status}`
+          );
+          const result = await updateTicketStatus(update.fetchedId, updateData);
+          results.push({
+            ticketId: update.savedTicket.id,
+            success: true,
+            oldStatus: update.fetchedTicket.status,
+            newStatus: updateData.status,
+          });
+        } catch (error) {
+          console.error(
+            `Failed to update ticket ${update.savedTicket.id}:`,
+            error
+          );
+          results.push({
+            ticketId: update.savedTicket.id,
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+
+      return {
+        total: updatesNeeded.length,
+        successful: results.filter((r) => r.success).length,
+        failed: results.filter((r) => !r.success).length,
+        details: results,
+      };
+    } catch (error) {
+      console.error("Error in pushTicketUpdates:", error);
+      throw error;
+    }
   }
 
   // Function to parse JIRA API response
@@ -426,6 +592,66 @@
       }
     };
 
+    // Add this after the sync button creation in createTicketsUI
+    const pushButton = document.createElement("button");
+    pushButton.textContent = "📤🌐 Push Tickets";
+    pushButton.style.cssText = `
+      padding: 5px 10px;
+      background: #EBECF0;
+      color: #42526E;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    `;
+
+    pushButton.onclick = async () => {
+      try {
+        pushButton.disabled = true;
+        pushButton.textContent = "Pushing...";
+
+        const results = await pushTicketUpdates();
+
+        if (results.total === 0) {
+          pushButton.textContent = "✓ No updates needed";
+        } else {
+          pushButton.textContent = `✓ Updated ${results.successful}/${results.total}`;
+
+          // Show detailed results in console
+          console.log("Push results:", results.details);
+
+          // If there were successful updates, show summary
+          if (results.successful > 0) {
+            const successDetails = results.details
+              .filter((r) => r.success)
+              .map((r) => `${r.ticketId}: ${r.oldStatus} → ${r.newStatus}`)
+              .join("\n");
+            console.log("Successfully updated tickets:\n" + successDetails);
+          }
+        }
+
+        // If there were any failures, show alert
+        if (results.failed > 0) {
+          const failures = results.details.filter((r) => !r.success);
+          console.error("Failed updates:", failures);
+          alert(
+            `Failed to update ${results.failed} tickets. Check console for details.`
+          );
+        }
+
+        setTimeout(() => {
+          pushButton.textContent = "📤🌐 Push Tickets";
+          pushButton.disabled = false;
+        }, 2000);
+      } catch (error) {
+        console.error("Error pushing tickets:", error);
+        pushButton.textContent = "× Error";
+        setTimeout(() => {
+          pushButton.textContent = "📤🌐 Push Tickets";
+          pushButton.disabled = false;
+        }, 2000);
+      }
+    };
+
     const addButton = document.createElement("button");
     addButton.textContent = "+ Add Ticket";
     addButton.style.cssText = `
@@ -452,6 +678,7 @@
     // Append buttons to container
     buttonsContainer.appendChild(refreshButton);
     buttonsContainer.appendChild(syncButton);
+    buttonsContainer.appendChild(pushButton);
     buttonsContainer.appendChild(addButton);
 
     header.appendChild(title);
