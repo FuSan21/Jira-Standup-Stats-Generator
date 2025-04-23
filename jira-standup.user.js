@@ -1576,27 +1576,46 @@
         gap: 5px;
     `;
 
-    // Get all selected columns
-    const selectedColumns = new Set();
-    Object.values(config).forEach((categoryColumns) => {
-      categoryColumns.forEach((col) => selectedColumns.add(col));
-    });
+    // Create a function to update available columns display
+    function updateAvailableColumns() {
+      // Clear existing columns list
+      columnsList.innerHTML = "";
 
-    // Display available columns
-    columns.forEach((column) => {
-      if (!selectedColumns.has(column.name)) {
-        const columnItem = document.createElement("div");
-        columnItem.style.cssText = `
+      // Get all selected columns
+      const selectedColumns = new Set();
+      Object.values(config).forEach((categoryColumns) => {
+        categoryColumns.forEach((col) => selectedColumns.add(col));
+      });
+
+      // Display available columns
+      columns.forEach((column) => {
+        if (!selectedColumns.has(column.name)) {
+          const columnItem = document.createElement("div");
+          columnItem.style.cssText = `
+                    padding: 4px 8px;
+                    background: #f4f5f7;
+                    border-radius: 3px;
+                    font-size: 12px;
+                    color: #42526E;
+                `;
+          columnItem.textContent = column.name;
+          columnsList.appendChild(columnItem);
+        }
+      });
+
+      // If no available columns, show a message
+      if (columnsList.children.length === 0) {
+        const noColumnsMsg = document.createElement("div");
+        noColumnsMsg.style.cssText = `
                 padding: 4px 8px;
-                background: #f4f5f7;
-                border-radius: 3px;
+                color: #6B778C;
+                font-style: italic;
                 font-size: 12px;
-                color: #42526E;
             `;
-        columnItem.textContent = column.name;
-        columnsList.appendChild(columnItem);
+        noColumnsMsg.textContent = "No available columns";
+        columnsList.appendChild(noColumnsMsg);
       }
-    });
+    }
 
     availableSection.appendChild(columnsList);
     modal.appendChild(availableSection);
@@ -1610,9 +1629,17 @@
     ];
 
     categories.forEach((category) => {
-      const section = createCategorySection(category, columns, config);
+      const section = createCategorySection(
+        category,
+        columns,
+        config,
+        updateAvailableColumns
+      );
       modal.appendChild(section);
     });
+
+    // Initial population of available columns
+    updateAvailableColumns();
 
     // Add footer buttons
     modal.appendChild(createConfigModalFooter(modal, board.id, config));
@@ -1620,7 +1647,12 @@
     return modal;
   }
 
-  function createCategorySection(category, allColumns, config) {
+  function createCategorySection(
+    category,
+    allColumns,
+    config,
+    updateAvailableColumns
+  ) {
     const section = document.createElement("div");
     section.style.cssText = `
       margin-bottom: 15px;
@@ -1663,12 +1695,16 @@
     // Add existing columns
     config[category.key].forEach((columnName) => {
       columnList.appendChild(
-        createColumnItem(columnName, category.key, config)
+        createColumnItem(
+          columnName,
+          category.key,
+          config,
+          updateAvailableColumns
+        )
       );
     });
 
     addButton.onclick = () => {
-      // Get all selected columns from all categories
       const allSelectedColumns = new Set();
       Object.values(config).forEach((categoryColumns) => {
         categoryColumns.forEach((col) => allSelectedColumns.add(col));
@@ -1686,10 +1722,17 @@
             if (!config[category.key].includes(col)) {
               config[category.key].push(col);
               columnList.appendChild(
-                createColumnItem(col, category.key, config)
+                createColumnItem(
+                  col,
+                  category.key,
+                  config,
+                  updateAvailableColumns
+                )
               );
             }
           });
+          // Update available columns after adding new ones
+          updateAvailableColumns();
         }
       );
       document.body.appendChild(modal);
@@ -1703,7 +1746,12 @@
     return section;
   }
 
-  function createColumnItem(columnName, category, config) {
+  function createColumnItem(
+    columnName,
+    category,
+    config,
+    updateAvailableColumns
+  ) {
     const item = document.createElement("div");
     item.style.cssText = `
       display: flex;
@@ -1732,6 +1780,8 @@
     removeButton.onclick = () => {
       config[category] = config[category].filter((col) => col !== columnName);
       item.remove();
+      // Update available columns after removing one
+      updateAvailableColumns();
     };
 
     item.appendChild(text);
@@ -1767,20 +1817,12 @@
       margin-bottom: 15px;
     `;
 
-    // Get all selected columns across all categories
-    const allSelectedColumns = new Set();
-    Object.values(settings.boardConfigs).forEach((config) => {
-      Object.values(config).forEach((categoryColumns) => {
-        categoryColumns.forEach((col) => allSelectedColumns.add(col));
-      });
-    });
+    // Only check selected columns for current category, not all boards
+    const currentlySelectedColumns = new Set(selectedColumns);
 
-    // Show only unselected columns
+    // Show columns that aren't in current category
     allColumns.forEach((column) => {
-      if (
-        !allSelectedColumns.has(column.name) &&
-        !selectedColumns.includes(column.name)
-      ) {
+      if (!currentlySelectedColumns.has(column.name)) {
         const row = document.createElement("div");
         row.style.marginBottom = "8px";
 
@@ -1878,7 +1920,7 @@
 
       if (customCheckbox.checked && customInput.value.trim()) {
         const customValue = customInput.value.trim();
-        if (!allSelectedColumns.has(customValue)) {
+        if (!currentlySelectedColumns.has(customValue)) {
           selected.push(customValue);
         }
       }
