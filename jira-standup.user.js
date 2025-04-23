@@ -212,25 +212,6 @@
           try {
             if (response.status === 200) {
               const data = JSON.parse(response.responseText);
-
-              // Map status for each ticket based on boardConfigs
-              data.tickets = data.tickets.map((ticket) => {
-                // Find the board config for this ticket's project
-                const boardConfig = findBoardConfigForTicket(ticket);
-                if (boardConfig) {
-                  // Map the status based on board configuration
-                  const mappedStatus = mapTicketStatus(
-                    ticket.status,
-                    boardConfig
-                  );
-                  return {
-                    ...ticket,
-                    status: mappedStatus,
-                  };
-                }
-                return ticket;
-              });
-
               resolve(data);
             } else {
               reject(
@@ -289,10 +270,11 @@
   }
 
   async function updateTicketStatus(ticketId, updateData) {
+    console.log("Updating ticket:", ticketId, updateData);
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: "PATCH",
-        url: `https://allgentech.io/api/employee/tickets/${ticketId}`,
+        url: `https://allgentexch.io/api/employee/tickets/${ticketId}`,
         headers: {
           "Content-Type": "application/json",
           "x-api-key": settings.apiKey || "",
@@ -321,7 +303,6 @@
 
       // Create maps for easy lookup
       const fetchedTicketsMap = new Map(fetchedTickets.map((t) => [t.name, t]));
-
       const savedTicketsMap = new Map(
         settings.savedTickets.map((t) => [t.id, t])
       );
@@ -331,11 +312,27 @@
 
       fetchedTickets.forEach((fetchedTicket) => {
         const savedTicket = savedTicketsMap.get(fetchedTicket.name);
-        if (savedTicket && savedTicket.status !== fetchedTicket.status) {
+        if (!savedTicket) return;
+
+        // Find board config for this ticket
+        const boardConfig = findBoardConfigForTicket(savedTicket);
+
+        // Map both statuses
+        const mappedSavedStatus = boardConfig
+          ? mapTicketStatus(savedTicket.status, boardConfig)
+          : savedTicket.status;
+
+        const mappedFetchedStatus = boardConfig
+          ? mapTicketStatus(fetchedTicket.status, boardConfig)
+          : fetchedTicket.status;
+
+        // Compare mapped statuses
+        if (mappedSavedStatus !== mappedFetchedStatus) {
           updatesNeeded.push({
-            fetchedId: fetchedTicket._id, // Use fetched ticket's ID for PATCH
-            savedTicket: savedTicket, // Use saved ticket's data for update
-            fetchedTicket: fetchedTicket, // Keep fetched data for reference
+            fetchedId: fetchedTicket._id,
+            savedTicket: savedTicket,
+            fetchedTicket: fetchedTicket,
+            mappedStatus: mappedSavedStatus, // Include mapped status for update
           });
         }
       });
@@ -348,10 +345,9 @@
       const results = [];
       for (const update of updatesNeeded) {
         try {
-          // Create merged ticket object using saved ticket's current data
           const updateData = {
-            name: update.savedTicket.id, // JIRA ticket ID
-            status: update.savedTicket.status, // Current status from saved
+            name: update.savedTicket.id,
+            status: update.mappedStatus,
             storyPoints: update.savedTicket.storyPoints || 0,
             projectName: update.savedTicket.projectName,
             ticketType: update.savedTicket.ticketType,
