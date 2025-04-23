@@ -16,8 +16,8 @@
   // Default values for settings
   const DEFAULT_SETTINGS = {
     currentUser: "",
+    teamName: "",
     apiKey: "",
-    timezone: "America/New_York",
     savedBoards: [],
     boardConfigs: {},
     savedTickets: [],
@@ -91,38 +91,6 @@
   }
 
   // API Functions
-  async function fetchCurrentUser() {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: "https://auxosolutions.atlassian.net/rest/api/latest/myself",
-        headers: {
-          Accept: "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-          "X-AUSERNAME":
-            document.querySelector('meta[name="ajs-remote-user"]')?.content ||
-            "",
-        },
-        withCredentials: true,
-        onload: function (response) {
-          try {
-            if (response.status !== 200)
-              throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`
-              );
-            const data = JSON.parse(response.responseText);
-            resolve({
-              displayName: data.displayName,
-              timezone: data.timeZone,
-            });
-          } catch (error) {
-            reject(error);
-          }
-        },
-        onerror: reject,
-      });
-    });
-  }
 
   async function fetchBoards() {
     return new Promise((resolve, reject) => {
@@ -1031,17 +999,8 @@
       settings.boardToProjectMap || DEFAULT_SETTINGS.boardToProjectMap;
     settings.AgtProjectNameMapping =
       settings.AgtProjectNameMapping || DEFAULT_SETTINGS.AgtProjectNameMapping;
-
-    if (!settings.currentUser || !settings.timezone) {
-      try {
-        const userData = await fetchCurrentUser();
-        settings.currentUser = userData.displayName;
-        settings.timezone = userData.timezone;
-        saveSettings(settings);
-      } catch (error) {
-        console.error("Error fetching current user:", error);
-      }
-    }
+    settings.currentUser = settings.currentUser || DEFAULT_SETTINGS.currentUser;
+    settings.teamName = settings.teamName || DEFAULT_SETTINGS.teamName;
 
     return settings;
   }
@@ -1271,25 +1230,74 @@
     const section = document.createElement("div");
     section.style.marginBottom = "20px";
 
+    // Create flex container for User Name and Team Name
+    const flexContainer = document.createElement("div");
+    flexContainer.style.cssText = `
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+    `;
+
+    // User Name field
+    const userWrapper = document.createElement("div");
+    userWrapper.style.cssText = `
+      flex: 1;
+    `;
+
     const userLabel = document.createElement("label");
-    userLabel.textContent = "Current User:";
-    userLabel.style.display = "block";
-    userLabel.style.marginBottom = "5px";
+    userLabel.textContent = "User Name:";
+    userLabel.style.cssText = `
+      display: block;
+      margin-bottom: 5px;
+    `;
 
     const userInput = document.createElement("input");
     userInput.type = "text";
     userInput.value = settings.currentUser;
     userInput.style.cssText = `
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        box-sizing: border-box;
-      `;
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    `;
     userInput.id = "settings-current-user";
 
-    section.appendChild(userLabel);
-    section.appendChild(userInput);
+    userWrapper.appendChild(userLabel);
+    userWrapper.appendChild(userInput);
+
+    // Team Name field
+    const teamWrapper = document.createElement("div");
+    teamWrapper.style.cssText = `
+      flex: 1;
+    `;
+
+    const teamLabel = document.createElement("label");
+    teamLabel.textContent = "Team Name:";
+    teamLabel.style.cssText = `
+      display: block;
+      margin-bottom: 5px;
+    `;
+
+    const teamInput = document.createElement("input");
+    teamInput.type = "text";
+    teamInput.value = settings.teamName || ""; // Use existing value or empty string
+    teamInput.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    `;
+    teamInput.id = "settings-team-name";
+
+    teamWrapper.appendChild(teamLabel);
+    teamWrapper.appendChild(teamInput);
+
+    // Add both wrappers to flex container
+    flexContainer.appendChild(userWrapper);
+    flexContainer.appendChild(teamWrapper);
+    section.appendChild(flexContainer);
 
     // Add API Key input
     const apiKeyLabel = document.createElement("label");
@@ -1652,7 +1660,8 @@
       `;
 
     saveButton.onclick = () => {
-      const userInput = container.querySelector('input[type="text"]');
+      const userInput = container.querySelector("#settings-current-user");
+      const teamInput = container.querySelector("#settings-team-name");
       const apiKeyInput = container.querySelector("#settings-api-key");
       const storyPointsField = container.querySelector("#story-points-field");
       const agtProjectNameMapping = {};
@@ -1666,6 +1675,7 @@
       const newSettings = {
         ...settings,
         currentUser: userInput.value,
+        teamName: teamInput.value,
         apiKey: apiKeyInput.value,
         storyPointsField: storyPointsField.value || "customfield_10034",
         AgtProjectNameMapping: agtProjectNameMapping,
