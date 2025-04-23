@@ -16,11 +16,12 @@
   // Default values for settings
   const DEFAULT_SETTINGS = {
     currentUser: "",
-    includeCancelled: false,
+    apiKey: "",
     timezone: "America/New_York",
     savedBoards: [],
     boardConfigs: {},
     savedTickets: [],
+    storyPointsField: "customfield_10034",
   };
 
   const INJECTION_POINTS = {
@@ -55,6 +56,36 @@
   };
 
   let settings = null;
+
+  function mergeTickets(savedTickets, fetchedTickets) {
+    const mergedTickets = [...savedTickets]; // Start with existing saved tickets
+    const savedTicketIds = new Set(savedTickets.map((t) => t.id));
+
+    fetchedTickets.forEach((fetchedTicket) => {
+      // Skip if ticket already exists in savedTickets
+      if (savedTicketIds.has(fetchedTicket.name)) {
+        console.log(`Skipping existing ticket: ${fetchedTicket.name}`);
+        return;
+      }
+
+      // Convert the fetched ticket to match our format
+      const ticket = {
+        id: fetchedTicket.name,
+        name: "",
+        storyPoints: fetchedTicket.storyPoints || 0,
+        status: fetchedTicket.status,
+        story: fetchedTicket.story || "",
+        projectName: fetchedTicket.projectName,
+        ticketType: fetchedTicket.ticketType,
+        lastUpdate: new Date(fetchedTicket.updatedAt),
+      };
+
+      console.log(`Adding new ticket: ${ticket.id}`);
+      mergedTickets.push(ticket);
+    });
+
+    return mergedTickets;
+  }
 
   // API Functions
   async function fetchCurrentUser() {
@@ -161,12 +192,46 @@
     });
   }
 
+  async function fetchIncompleteTickets() {
+    const today = new Date();
+    const estDate = new Date(
+      today.toLocaleString("en-US", { timeZone: "America/New_York" })
+    );
+    const dateStr = estDate.toISOString().split("T")[0];
+
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: `https://allgentech.io/api/employee/incomplete-tickets?date=${dateStr}`,
+        headers: {
+          Accept: "application/json",
+          "x-api-key": settings.apiKey || "",
+        },
+        onload: function (response) {
+          try {
+            if (response.status === 200) {
+              const data = JSON.parse(response.responseText);
+              resolve(data);
+            } else {
+              reject(
+                new Error(`HTTP ${response.status}: ${response.statusText}`)
+              );
+            }
+          } catch (error) {
+            reject(error);
+          }
+        },
+        onerror: reject,
+      });
+    });
+  }
+
   // Function to parse JIRA API response
   function parseTicketData(data) {
     return {
       id: data.key,
       name: data.fields.summary,
-      storyPoints: data.fields.customfield_10026 || 0, // Adjust field ID if needed
+      storyPoints: data.fields[settings.storyPointsField] || 0,
       status: data.fields.status.name,
       story: data.fields.description || "",
       projectName: data.fields.project.name,
@@ -314,6 +379,52 @@
       }
     };
 
+    const syncButton = document.createElement("button");
+    syncButton.textContent = "🔄 Sync Stats";
+    syncButton.style.cssText = `
+                  padding: 5px 10px;
+                  background: #EBECF0;
+                  color: #42526E;
+                  border: none;
+                  border-radius: 3px;
+                  cursor: pointer;
+                `;
+
+    syncButton.onclick = async () => {
+      try {
+        syncButton.disabled = true;
+        syncButton.textContent = "Syncing...";
+
+        const data = await fetchIncompleteTickets();
+        console.log("Fetched tickets:", data.tickets);
+
+        // Merge fetched tickets with saved tickets
+        const mergedTickets = mergeTickets(settings.savedTickets, data.tickets);
+
+        // Update settings with merged tickets
+        settings.savedTickets = mergedTickets;
+        saveSettings(settings);
+
+        // Refresh the UI
+        refreshTicketsList(ticketsList);
+
+        console.log("Sync completed. Total tickets:", mergedTickets.length);
+        console.log("Merged tickets:", mergedTickets);
+        syncButton.textContent = "✓ Synced";
+        setTimeout(() => {
+          syncButton.textContent = "🔄 Sync Stats";
+          syncButton.disabled = false;
+        }, 2000);
+      } catch (error) {
+        console.error("Error syncing tickets:", error);
+        syncButton.textContent = "× Error";
+        setTimeout(() => {
+          syncButton.textContent = "🔄 Sync Stats";
+          syncButton.disabled = false;
+        }, 2000);
+      }
+    };
+
     const addButton = document.createElement("button");
     addButton.textContent = "+ Add Ticket";
     addButton.style.cssText = `
@@ -339,6 +450,7 @@
 
     // Append buttons to container
     buttonsContainer.appendChild(refreshButton);
+    buttonsContainer.appendChild(syncButton);
     buttonsContainer.appendChild(addButton);
 
     header.appendChild(title);
@@ -551,7 +663,7 @@
       addButton.innerHTML = `<span style="color: #36B37E;">✓ Added</span>`;
       addButton.style.cursor = "default";
     } else {
-      addButton.innerHTML = `<span>➕ Save Ticket</span>`;
+      addButton.innerHTML = `<span>➕ Add Ticket to Jira Stats</span>`;
 
       addButton.onmouseover = () => {
         addButton.style.background =
@@ -575,7 +687,7 @@
           console.error("Error adding ticket:", error);
           addButton.innerHTML = `<span style="color: #FF5630;">× Error</span>`;
           setTimeout(() => {
-            addButton.innerHTML = `<span>➕ Save Ticket</span>`;
+            addButton.innerHTML = `<span>➕ Add Ticket to Jira Stats</span>`;
           }, 2000);
         }
       };
@@ -618,8 +730,6 @@
     settings.savedBoards = settings.savedBoards || DEFAULT_SETTINGS.savedBoards;
     settings.boardConfigs =
       settings.boardConfigs || DEFAULT_SETTINGS.boardConfigs;
-    settings.includeCancelled =
-      settings.includeCancelled ?? DEFAULT_SETTINGS.includeCancelled;
 
     if (!settings.currentUser || !settings.timezone) {
       try {
@@ -631,6 +741,8 @@
         console.error("Error fetching current user:", error);
       }
     }
+
+    settings.apiKey = settings.apiKey || DEFAULT_SETTINGS.apiKey;
 
     return settings;
   }
@@ -747,6 +859,73 @@
 
     return modal;
   }
+  // Add this function after createUserSection
+  function createStoryPointsSection() {
+    const section = document.createElement("div");
+    section.style.cssText = `
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  `;
+
+    const header = document.createElement("h4");
+    header.textContent = "Story Points Configuration";
+    header.style.marginBottom = "15px";
+    section.appendChild(header);
+
+    const fieldContainer = document.createElement("div");
+    fieldContainer.style.cssText = `
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  `;
+
+    const inputWrapper = document.createElement("div");
+    inputWrapper.style.cssText = `
+    flex-grow: 1;
+  `;
+
+    const label = document.createElement("label");
+    label.textContent = "Story Points Field Name:";
+    label.style.cssText = `
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+  `;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = settings.storyPointsField || "customfield_10034";
+    input.id = "story-points-field";
+    input.style.cssText = `
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+  `;
+
+    const helpText = document.createElement("div");
+    helpText.style.cssText = `
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+  `;
+    helpText.innerHTML = `
+    Default: customfield_10034<br>
+    This is the JIRA field name used for story points.<br>
+    You can find this by exporting a ticket as XML from the 3 dots menu from top-right corner when viewing a ticket.
+  `;
+
+    inputWrapper.appendChild(label);
+    inputWrapper.appendChild(input);
+    inputWrapper.appendChild(helpText);
+    fieldContainer.appendChild(inputWrapper);
+    section.appendChild(fieldContainer);
+
+    return section;
+  }
 
   function createSettingsUI() {
     // Create base container
@@ -773,6 +952,9 @@
 
     // Add current user input
     container.appendChild(createUserSection());
+
+    // Add story points configuration
+    container.appendChild(createStoryPointsSection());
 
     // Add boards section
     container.appendChild(createBoardsSection());
@@ -802,27 +984,64 @@
         border-radius: 4px;
         box-sizing: border-box;
       `;
+    userInput.id = "settings-current-user";
 
     section.appendChild(userLabel);
     section.appendChild(userInput);
 
-    // Add cancelled checkbox
-    const cancelledContainer = document.createElement("div");
-    cancelledContainer.style.marginTop = "10px";
+    // Add API Key input
+    const apiKeyLabel = document.createElement("label");
+    apiKeyLabel.textContent = "API Key (Optional):";
+    apiKeyLabel.style.display = "block";
+    apiKeyLabel.style.marginTop = "10px";
+    apiKeyLabel.style.marginBottom = "5px";
 
-    const cancelledCheck = document.createElement("input");
-    cancelledCheck.type = "checkbox";
-    cancelledCheck.id = "include-cancelled";
-    cancelledCheck.checked = settings.includeCancelled;
+    const apiKeyContainer = document.createElement("div");
+    apiKeyContainer.style.display = "flex";
+    apiKeyContainer.style.alignItems = "center";
+    apiKeyContainer.style.gap = "5px";
 
-    const cancelledLabel = document.createElement("label");
-    cancelledLabel.htmlFor = "include-cancelled";
-    cancelledLabel.textContent = "Include Cancelled Status";
-    cancelledLabel.style.marginLeft = "5px";
+    const apiKeyInput = document.createElement("input");
+    apiKeyInput.type = "password";
+    apiKeyInput.value = settings.apiKey || ""; // Ensure value is not null/undefined
+    apiKeyInput.placeholder = "Enter your JIRA API Key";
+    apiKeyInput.style.cssText = `
+        flex-grow: 1; /* Take remaining width */
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+      `;
+    apiKeyInput.id = "settings-api-key";
 
-    cancelledContainer.appendChild(cancelledCheck);
-    cancelledContainer.appendChild(cancelledLabel);
-    section.appendChild(cancelledContainer);
+    const revealButton = document.createElement("button");
+    revealButton.textContent = "👁️"; // Use an eye icon or text like "Show"
+    revealButton.type = "button"; // Prevent form submission
+    revealButton.title = "Show/Hide API Key";
+    revealButton.style.cssText = `
+        padding: 8px;
+        background: #f4f5f7;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+        line-height: 1; /* Adjust for icon alignment */
+      `;
+
+    revealButton.onclick = () => {
+      if (apiKeyInput.type === "password") {
+        apiKeyInput.type = "text";
+        revealButton.textContent = "🔒"; // Or "Hide"
+      } else {
+        apiKeyInput.type = "password";
+        revealButton.textContent = "👁️"; // Or "Show"
+      }
+    };
+
+    apiKeyContainer.appendChild(apiKeyInput);
+    apiKeyContainer.appendChild(revealButton);
+
+    section.appendChild(apiKeyLabel);
+    section.appendChild(apiKeyContainer);
 
     return section;
   }
@@ -995,12 +1214,15 @@
 
     saveButton.onclick = () => {
       const userInput = container.querySelector('input[type="text"]');
+      const apiKeyInput = container.querySelector("#settings-api-key");
       const cancelledCheck = container.querySelector("#include-cancelled");
+      const storyPointsField = container.querySelector("#story-points-field");
 
       const newSettings = {
         ...settings,
         currentUser: userInput.value,
-        includeCancelled: cancelledCheck.checked,
+        apiKey: apiKeyInput.value,
+        storyPointsField: storyPointsField.value || "customfield_10034",
       };
 
       saveSettings(newSettings);
