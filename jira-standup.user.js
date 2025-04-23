@@ -19,11 +19,11 @@
     apiKey: "",
     timezone: "America/New_York",
     savedBoards: [],
-    savedBoardsName: {},
     boardConfigs: {},
     savedTickets: [],
     storyPointsField: "customfield_10034",
     savedProjects: [],
+    boardToProjectMap: {},
   };
 
   const INJECTION_POINTS = {
@@ -142,19 +142,24 @@
               throw new Error(
                 `HTTP ${response.status}: ${response.statusText}`
               );
+
             const data = JSON.parse(response.responseText);
 
-            // Extract unique project names from the boards
+            // Extract unique project names and create board to project mapping
             const projectNames = new Set();
+            const boardToProjectMap = {};
+
             data.values.forEach((board) => {
               if (board.location && board.location.projectName) {
                 projectNames.add(board.location.projectName);
+                boardToProjectMap[board.name] = board.location.projectName;
               }
             });
 
-            // Update settings with unique project names
+            // Update settings with unique project names and mapping
             settings.savedProjects = Array.from(projectNames);
-            console.log("Unique project names:", settings.savedProjects);
+            settings.boardToProjectMap = boardToProjectMap;
+
             saveSettings(settings);
 
             resolve(data.values);
@@ -244,14 +249,9 @@
 
   // Helper function to find board config for a ticket
   function findBoardConfigForTicket(ticket) {
-    // Find the board that matches the ticket's project
-    const matchingBoard = settings.savedBoards.find((board) => {
-      const shortName = settings.savedBoardsName[board.id];
-      // Match either by board's short name or full name
-      return (
-        ticket.projectName === shortName || ticket.projectName === board.name
-      );
-    });
+    const matchingBoard = settings.savedBoards.find(
+      (board) => ticket.projectName === board.name
+    );
 
     if (matchingBoard) {
       return settings.boardConfigs[matchingBoard.id];
@@ -971,13 +971,13 @@
       settings.boardConfigs || DEFAULT_SETTINGS.boardConfigs;
     settings.savedTickets =
       settings.savedTickets || DEFAULT_SETTINGS.savedTickets;
-    settings.savedBoardsName =
-      settings.savedBoardsName || DEFAULT_SETTINGS.savedBoardsName;
     settings.apiKey = settings.apiKey || DEFAULT_SETTINGS.apiKey;
     settings.storyPointsField =
       settings.storyPointsField || DEFAULT_SETTINGS.storyPointsField;
     settings.savedProjects =
       settings.savedProjects || DEFAULT_SETTINGS.savedProjects;
+    settings.boardToProjectMap =
+      settings.boardToProjectMap || DEFAULT_SETTINGS.boardToProjectMap;
 
     if (!settings.currentUser || !settings.timezone) {
       try {
@@ -1372,61 +1372,21 @@
         flex-grow: 1;
     `;
 
-    // Add short name input field
-    const shortNameContainer = document.createElement("div");
-    shortNameContainer.style.cssText = `
-        display: none;
-        margin-right: 12px;
-    `;
-
-    const shortNameInput = document.createElement("input");
-    shortNameInput.type = "text";
-    shortNameInput.placeholder = "Short name";
-    shortNameInput.value = settings.savedBoardsName[board.id] || "";
-    shortNameInput.style.cssText = `
-        padding: 4px 8px;
-        border: 1px solid #ddd;
-        border-radius: 3px;
-        font-size: 12px;
-        width: 100px;
-    `;
-
-    // Show/hide short name input based on checkbox
     checkbox.onchange = () => {
       if (checkbox.checked) {
         settings.savedBoards.push({
           id: board.id,
           name: board.name,
         });
-        shortNameContainer.style.display = "block";
       } else {
         settings.savedBoards = settings.savedBoards.filter(
           (saved) => saved.id !== board.id
         );
-        // Remove from savedBoardsName when unchecked
-        delete settings.savedBoardsName[board.id];
-        shortNameContainer.style.display = "none";
-        shortNameInput.value = "";
       }
     };
 
-    // If board is already checked, show the short name input
-    if (checkbox.checked) {
-      shortNameContainer.style.display = "block";
-    }
-
-    shortNameInput.onchange = () => {
-      if (shortNameInput.value.trim()) {
-        settings.savedBoardsName[board.id] = shortNameInput.value.trim();
-      } else {
-        delete settings.savedBoardsName[board.id];
-      }
-    };
-
-    shortNameContainer.appendChild(shortNameInput);
     leftSection.appendChild(checkbox);
     leftSection.appendChild(name);
-    leftSection.appendChild(shortNameContainer);
 
     // Configure button (right section)
     const configButton = document.createElement("button");
@@ -1451,7 +1411,6 @@
           throw new Error("Invalid board configuration");
         }
 
-        // Close the settings modal before opening config modal
         const settingsModal = document.querySelector(".jira-settings-modal");
         if (settingsModal) {
           settingsModal.remove();
