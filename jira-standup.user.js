@@ -5,6 +5,8 @@
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
+// @connect      allgentech.io
+// @connect      auxosolutions.atlassian.net
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-standup.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-standup.user.js
@@ -21,7 +23,7 @@
     savedBoards: [],
     boardConfigs: {},
     savedTickets: [],
-    storyPointsField: "customfield_10034",
+    storyPointsFields: {},
     savedProjects: [],
     boardToProjectMap: {},
     AgtProjectNameMapping: {},
@@ -171,6 +173,42 @@
             if (!data?.columnConfig?.columns)
               throw new Error("Invalid board configuration format");
 
+            console.log(
+              `[Board ${boardId}] Checking estimation configuration:`,
+              data.estimation
+            );
+
+            // Only set story points field if it doesn't exist or is empty
+            if (
+              !settings.storyPointsFields[boardId] ||
+              settings.storyPointsFields[boardId] === ""
+            ) {
+              if (
+                data.estimation?.type === "field" &&
+                data.estimation.field?.displayName
+                  ?.toLowerCase()
+                  .includes("story point")
+              ) {
+                console.log(`[Board ${boardId}] Found story points field:`, {
+                  fieldId: data.estimation.field.fieldId,
+                  displayName: data.estimation.field.displayName,
+                  existing: settings.storyPointsFields[boardId],
+                });
+                settings.storyPointsFields[boardId] =
+                  data.estimation.field.fieldId;
+                saveSettings(settings);
+              } else {
+                console.log(
+                  `[Board ${boardId}] No story points field found in estimation config`
+                );
+              }
+            } else {
+              console.log(
+                `[Board ${boardId}] Using existing story points field:`,
+                settings.storyPointsFields[boardId]
+              );
+            }
+
             resolve(data);
           } catch (error) {
             reject(error);
@@ -290,7 +328,7 @@
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: "PATCH",
-        url: `https://allgentechx.io/api/employee/tickets/${ticketId}`,
+        url: `https://allgentech.io/api/employee/tickets/${ticketId}`,
         headers: {
           "Content-Type": "application/json",
           "x-api-key": settings.apiKey || "",
@@ -425,10 +463,54 @@
 
   // Function to parse JIRA API response
   function parseTicketData(data) {
+    // Get all boards that match the project
+    const matchingBoards = settings.savedBoards.filter((board) => {
+      const boardProjectName = settings.boardToProjectMap[board.name];
+      return data.fields.project.name === boardProjectName;
+    });
+
+    if (matchingBoards.length === 0) {
+      // No matching board found
+      return {
+        id: data.key,
+        name: data.fields.summary,
+        storyPoints: 0,
+        status: data.fields.status.name,
+        story: "",
+        projectName: data.fields.project.name,
+        ticketType: data.fields.issuetype.name,
+      };
+    }
+
+    // Try to find the correct board by checking if the ticket's current status
+    // exists in any of the board's configurations
+    const currentStatus = data.fields.status.name;
+    const correctBoard = matchingBoards.find((board) => {
+      const boardConfig = settings.boardConfigs[board.id];
+      if (!boardConfig) return false;
+
+      // Check if the status exists in any category
+      return Object.values(boardConfig).some((statuses) =>
+        statuses.includes(currentStatus)
+      );
+    });
+
+    // Use the board that matches the status, or the first board if none match
+    const boardToUse = correctBoard || matchingBoards[0];
+
+    // Only use story points if we found the correct board and it has the field configured
+    let storyPoints = 0;
+    if (boardToUse) {
+      const fieldId = settings.storyPointsFields[boardToUse.id];
+      if (fieldId && fieldId in data.fields) {
+        storyPoints = data.fields[fieldId] || 0;
+      }
+    }
+
     return {
       id: data.key,
       name: data.fields.summary,
-      storyPoints: data.fields[settings.storyPointsField] || 0,
+      storyPoints: storyPoints,
       status: data.fields.status.name,
       story: "",
       projectName: data.fields.project.name,
@@ -991,8 +1073,8 @@
     settings.savedTickets =
       settings.savedTickets || DEFAULT_SETTINGS.savedTickets;
     settings.apiKey = settings.apiKey || DEFAULT_SETTINGS.apiKey;
-    settings.storyPointsField =
-      settings.storyPointsField || DEFAULT_SETTINGS.storyPointsField;
+    settings.storyPointsFields =
+      settings.storyPointsFields || DEFAULT_SETTINGS.storyPointsFields;
     settings.savedProjects =
       settings.savedProjects || DEFAULT_SETTINGS.savedProjects;
     settings.boardToProjectMap =
@@ -1117,73 +1199,6 @@
 
     return modal;
   }
-  // Add this function after createUserSection
-  function createStoryPointsSection() {
-    const section = document.createElement("div");
-    section.style.cssText = `
-    margin-bottom: 20px;
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-  `;
-
-    const header = document.createElement("h4");
-    header.textContent = "Story Points Configuration";
-    header.style.marginBottom = "15px";
-    section.appendChild(header);
-
-    const fieldContainer = document.createElement("div");
-    fieldContainer.style.cssText = `
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-  `;
-
-    const inputWrapper = document.createElement("div");
-    inputWrapper.style.cssText = `
-    flex-grow: 1;
-  `;
-
-    const label = document.createElement("label");
-    label.textContent = "Story Points Field Name:";
-    label.style.cssText = `
-    display: block;
-    margin-bottom: 5px;
-    font-size: 14px;
-  `;
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = settings.storyPointsField || "customfield_10034";
-    input.id = "story-points-field";
-    input.style.cssText = `
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
-  `;
-
-    const helpText = document.createElement("div");
-    helpText.style.cssText = `
-    font-size: 12px;
-    color: #666;
-    margin-top: 5px;
-  `;
-    helpText.innerHTML = `
-    Default: customfield_10034<br>
-    This is the JIRA field name used for story points.<br>
-    You can find this by exporting a ticket as XML from the 3 dots menu from top-right corner when viewing a ticket.
-  `;
-
-    inputWrapper.appendChild(label);
-    inputWrapper.appendChild(input);
-    inputWrapper.appendChild(helpText);
-    fieldContainer.appendChild(inputWrapper);
-    section.appendChild(fieldContainer);
-
-    return section;
-  }
 
   function createSettingsUI() {
     // Create base container
@@ -1210,9 +1225,6 @@
 
     // Add current user input
     container.appendChild(createUserSection());
-
-    // Add story points configuration
-    container.appendChild(createStoryPointsSection());
 
     // Add projects section first
     container.appendChild(createProjectsSection());
@@ -1663,7 +1675,6 @@
       const userInput = container.querySelector("#settings-current-user");
       const teamInput = container.querySelector("#settings-team-name");
       const apiKeyInput = container.querySelector("#settings-api-key");
-      const storyPointsField = container.querySelector("#story-points-field");
       const agtProjectNameMapping = {};
       const agtInputs = container.querySelectorAll("input[data-project-name]");
       agtInputs.forEach((input) => {
@@ -1677,7 +1688,6 @@
         currentUser: userInput.value,
         teamName: teamInput.value,
         apiKey: apiKeyInput.value,
-        storyPointsField: storyPointsField.value || "customfield_10034",
         AgtProjectNameMapping: agtProjectNameMapping,
       };
 
@@ -1732,6 +1742,70 @@
     title.textContent = `Configure Columns - ${board.name}`;
     title.style.marginBottom = "20px";
     modal.appendChild(title);
+
+    // Add Story Points Field section
+    const storyPointsSection = document.createElement("div");
+    storyPointsSection.style.cssText = `
+      margin-bottom: 20px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    `;
+
+    const storyPointsHeader = document.createElement("h4");
+    storyPointsHeader.textContent = "Story Points Configuration";
+    storyPointsHeader.style.margin = "0 0 10px 0";
+    storyPointsSection.appendChild(storyPointsHeader);
+
+    const fieldContainer = document.createElement("div");
+    fieldContainer.style.cssText = `
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    `;
+
+    const inputWrapper = document.createElement("div");
+    inputWrapper.style.flexGrow = "1";
+
+    const label = document.createElement("label");
+    label.textContent = "Story Points Field Name:";
+    label.style.cssText = `
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+    `;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = settings.storyPointsFields[board.id] || "";
+    input.id = `story-points-field-${board.id}`;
+    input.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    `;
+
+    const helpText = document.createElement("div");
+    helpText.style.cssText = `
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    `;
+    helpText.innerHTML = `
+      This is the JIRA field name used for story points.<br>
+      Value is loaded from boards by default, update if it fails to do so.<br>
+      You can find this by exporting a ticket as XML from the 3 dots menu when viewing a ticket.
+    `;
+
+    inputWrapper.appendChild(label);
+    inputWrapper.appendChild(input);
+    inputWrapper.appendChild(helpText);
+    fieldContainer.appendChild(inputWrapper);
+    storyPointsSection.appendChild(fieldContainer);
+
+    modal.appendChild(storyPointsSection);
 
     // Add Available Columns section at the top
     const availableSection = document.createElement("div");
@@ -2152,6 +2226,13 @@
 
     saveButton.onclick = () => {
       settings.boardConfigs[boardId] = config;
+      const storyPointsInput = modal.querySelector(
+        `#story-points-field-${boardId}`
+      );
+      if (storyPointsInput) {
+        settings.storyPointsFields[boardId] =
+          storyPointsInput.value.trim() || "";
+      }
       saveSettings(settings);
       modal.remove();
 
