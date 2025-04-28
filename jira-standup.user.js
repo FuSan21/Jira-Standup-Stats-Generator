@@ -397,6 +397,8 @@
 
       // Process updates sequentially
       const results = [];
+      const completedTicketIds = []; // Track completed ticket IDs
+
       for (const update of updatesNeeded) {
         try {
           // Get mapped project name from settings
@@ -428,6 +430,12 @@
           );
 
           const result = await updateTicketStatus(update.fetchedId, updateData);
+
+          // If the update was successful and the status is "Done", track for removal
+          if (updateData.status === "Done") {
+            completedTicketIds.push(update.savedTicket.id);
+          }
+
           results.push({
             ticketId: update.savedTicket.id,
             success: true,
@@ -449,10 +457,88 @@
         }
       }
 
+      // Remove all completed tickets from savedTickets in one go
+      if (completedTicketIds.length > 0) {
+        console.log(
+          `Removing ${completedTicketIds.length} completed tickets:`,
+          completedTicketIds
+        );
+
+        // Filter out the completed tickets
+        settings.savedTickets = settings.savedTickets.filter(
+          (ticket) => !completedTicketIds.includes(ticket.id)
+        );
+
+        // Save settings immediately
+        saveSettings(settings);
+
+        // Find the tickets modal and refresh it if it's visible
+        const ticketsModal = document.querySelector(".jira-tickets-modal");
+        if (ticketsModal) {
+          // Find the tickets list container
+          const ticketsList = ticketsModal.querySelector(
+            "div[style*='overflow-y: auto']"
+          );
+          if (ticketsList) {
+            // We need to recreate the refreshTicketsList function since it's defined locally in createTicketsUI
+            const refreshList = (listElement) => {
+              listElement.innerHTML = "";
+              settings.savedTickets?.forEach((ticket) => {
+                const item = document.createElement("div");
+                item.style.cssText = `
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  padding: 10px;
+                  border-bottom: 1px solid #eee;
+                `;
+
+                const info = document.createElement("div");
+                info.innerHTML = `
+                  <div><strong>${ticket.id}</strong> - ${ticket.name}</div>
+                  <div style="font-size: 12px; color: #666;">
+                    ${ticket.projectName} • ${ticket.ticketType} • ${
+                  ticket.status
+                } 
+                    ${
+                      ticket.storyPoints ? `• ${ticket.storyPoints} points` : ""
+                    }
+                  </div>
+                `;
+
+                const removeBtn = document.createElement("button");
+                removeBtn.textContent = "×";
+                removeBtn.style.cssText = `
+                  border: none;
+                  background: none;
+                  color: #666;
+                  cursor: pointer;
+                  padding: 5px;
+                  font-size: 16px;
+                `;
+
+                removeBtn.onclick = () => {
+                  removeTicket(ticket.id);
+                  refreshList(listElement); // Use the local function for recursive calls
+                };
+
+                item.appendChild(info);
+                item.appendChild(removeBtn);
+                listElement.appendChild(item);
+              });
+            };
+
+            // Call our recreated refresh function
+            refreshList(ticketsList);
+          }
+        }
+      }
+
       return {
         total: updatesNeeded.length,
         successful: results.filter((r) => r.success).length,
         failed: results.filter((r) => !r.success).length,
+        completedRemoved: completedTicketIds.length,
         details: results,
       };
     } catch (error) {
@@ -1794,6 +1880,7 @@
       margin-top: 5px;
     `;
     helpText.innerHTML = `
+
       This is the JIRA field name used for story points.<br>
       Value is loaded from boards by default, update if it fails to do so.<br>
       You can find this by exporting a ticket as XML from the 3 dots menu when viewing a ticket.
