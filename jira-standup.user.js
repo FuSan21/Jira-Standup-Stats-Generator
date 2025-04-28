@@ -348,6 +348,65 @@
     });
   }
 
+  async function checkDuplicateTicket(ticketName) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: `https://allgentech.io/api/employee/tickets/check-duplicate?ticketName=${encodeURIComponent(
+          ticketName
+        )}`,
+        headers: {
+          Accept: "application/json",
+          "x-api-key": settings.apiKey || "",
+        },
+        onload: function (response) {
+          try {
+            if (response.status === 200) {
+              const data = JSON.parse(response.responseText);
+              resolve(data.duplicate);
+            } else {
+              reject(
+                new Error(`HTTP ${response.status}: ${response.statusText}`)
+              );
+            }
+          } catch (error) {
+            reject(error);
+          }
+        },
+        onerror: reject,
+      });
+    });
+  }
+
+  async function createNewTicket(ticketData) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "POST",
+        url: `https://allgentech.io/api/employee/tickets`,
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": settings.apiKey || "",
+        },
+        data: JSON.stringify(ticketData),
+        onload: function (response) {
+          try {
+            if (response.status === 200 || response.status === 201) {
+              const data = JSON.parse(response.responseText);
+              resolve(data);
+            } else {
+              reject(
+                new Error(`HTTP ${response.status}: ${response.statusText}`)
+              );
+            }
+          } catch (error) {
+            reject(error);
+          }
+        },
+        onerror: reject,
+      });
+    });
+  }
+
   // Add this function near other ticket management functions
   async function pushTicketUpdates() {
     try {
@@ -364,6 +423,7 @@
       // Find tickets that need updating
       const updatesNeeded = [];
 
+      // Tickets that exist in both systems that need updating
       fetchedTickets.forEach((fetchedTicket) => {
         const savedTicket = savedTicketsMap.get(fetchedTicket.name);
         if (!savedTicket) return;
@@ -391,14 +451,29 @@
         }
       });
 
+      // Find tickets that exist in JIRA but not in the AGT system
+      const ticketsToCreate = [];
+      for (const savedTicket of settings.savedTickets) {
+        if (!fetchedTicketsMap.has(savedTicket.id)) {
+          // This ticket exists in JIRA but not in AGT system
+          // Check if it's a duplicate before adding
+          ticketsToCreate.push(savedTicket);
+        }
+      }
+
       console.log(
-        `Found ${updatesNeeded.length} tickets that need status updates`
+        `Found ${updatesNeeded.length} tickets that need status updates and ${ticketsToCreate.length} tickets to create`
       );
 
       // Process updates sequentially
-      const results = [];
+      const results = {
+        updated: [],
+        created: [],
+        failed: [],
+      };
       const completedTicketIds = []; // Track completed ticket IDs
 
+      // First, handle updates to existing tickets
       for (const update of updatesNeeded) {
         try {
           // Get mapped project name from settings
@@ -436,7 +511,7 @@
             completedTicketIds.push(update.savedTicket.id);
           }
 
-          results.push({
+          results.updated.push({
             ticketId: update.savedTicket.id,
             success: true,
             oldStatus: update.fetchedTicket.status,
@@ -449,8 +524,84 @@
             `Failed to update ticket ${update.savedTicket.id}:`,
             error
           );
-          results.push({
+          results.failed.push({
             ticketId: update.savedTicket.id,
+            action: "update",
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+
+      // Then, create new tickets if they don't already exist
+      for (const ticket of ticketsToCreate) {
+        try {
+          // Check if this ticket already exists in the AGT system
+          const isDuplicate = await checkDuplicateTicket(ticket.id);
+          if (isDuplicate) {
+            console.log(
+              `Ticket ${ticket.id} already exists in AGT system, skipping creation`
+            );
+            continue;
+          }
+
+          // Map the project name
+          const mappedProjectName =
+            settings.AgtProjectNameMapping[ticket.projectName] ||
+            ticket.projectName;
+
+          const today = new Date();
+          const estDate = new Date(
+            today.toLocaleString("en-US", { timeZone: "America/New_York" })
+          );
+          const dateStr = estDate.toISOString().split("T")[0];
+
+          // Find board config for this ticket to map its status
+          const boardConfig = findBoardConfigForTicket(ticket);
+
+          // Map the status if board config exists
+          const mappedStatus = boardConfig
+            ? mapTicketStatus(ticket.status, boardConfig)
+            : ticket.status;
+
+          // Create new ticket
+          const newTicketData = {
+            team: settings.teamName || "Auxo",
+            name: ticket.id,
+            projectName: mappedProjectName,
+            ticketType: ticket.ticketType,
+            status: mappedStatus, // Use mapped status instead of original status
+            date: dateStr,
+            raisedBy: settings.currentUser || "Jira User",
+            storyPoints: ticket.storyPoints || 0,
+          };
+
+          console.log(`Creating new ticket in AGT system:`, newTicketData);
+
+          const result = await createNewTicket(newTicketData);
+          console.log(`Ticket created with ID: ${result.ticketId}`);
+
+          // If the ticket is created with "Done" status, track for removal
+          if (mappedStatus === "Done") {
+            console.log(
+              `New ticket ${ticket.id} is already Done, marking for removal`
+            );
+            completedTicketIds.push(ticket.id);
+          }
+
+          results.created.push({
+            ticketId: ticket.id,
+            success: true,
+            agtId: result.ticketId,
+            status: mappedStatus,
+            projectName: mappedProjectName,
+            dateCreated: dateStr,
+          });
+        } catch (error) {
+          console.error(`Failed to create ticket ${ticket.id}:`, error);
+          results.failed.push({
+            ticketId: ticket.id,
+            action: "create",
             success: false,
             error: error.message,
           });
@@ -535,11 +686,17 @@
       }
 
       return {
-        total: updatesNeeded.length,
-        successful: results.filter((r) => r.success).length,
-        failed: results.filter((r) => !r.success).length,
+        totalUpdates: updatesNeeded.length,
+        totalCreated: results.created.length,
+        totalFailed: results.failed.length,
+        successfulUpdates: results.updated.length,
+        successfulCreations: results.created.length,
         completedRemoved: completedTicketIds.length,
-        details: results,
+        details: {
+          updated: results.updated,
+          created: results.created,
+          failed: results.failed,
+        },
       };
     } catch (error) {
       console.error("Error in pushTicketUpdates:", error);
@@ -809,30 +966,37 @@
 
         const results = await pushTicketUpdates();
 
-        if (results.total === 0) {
+        if (results.totalUpdates === 0 && results.totalCreated === 0) {
           pushButton.textContent = "✓ No updates needed";
         } else {
-          pushButton.textContent = `✓ Updated ${results.successful}/${results.total}`;
+          pushButton.textContent = `✓ Updated ${results.successfulUpdates}/${results.totalUpdates}, Created ${results.successfulCreations}`;
 
           // Show detailed results in console
           console.log("Push results:", results.details);
 
           // If there were successful updates, show summary
-          if (results.successful > 0) {
-            const successDetails = results.details
+          if (results.successfulUpdates > 0) {
+            const successDetails = results.details.updated
               .filter((r) => r.success)
               .map((r) => `${r.ticketId}: ${r.oldStatus} → ${r.newStatus}`)
               .join("\n");
             console.log("Successfully updated tickets:\n" + successDetails);
           }
+
+          // If there were successful creations, show summary
+          if (results.successfulCreations > 0) {
+            const creationDetails = results.details.created
+              .map((r) => `${r.ticketId}: Created with status ${r.status}`)
+              .join("\n");
+            console.log("Successfully created tickets:\n" + creationDetails);
+          }
         }
 
         // If there were any failures, show alert
-        if (results.failed > 0) {
-          const failures = results.details.filter((r) => !r.success);
-          console.error("Failed updates:", failures);
+        if (results.totalFailed > 0) {
+          console.error("Failed operations:", results.details.failed);
           alert(
-            `Failed to update ${results.failed} tickets. Check console for details.`
+            `Failed ${results.totalFailed} operations. Check console for details.`
           );
         }
 
