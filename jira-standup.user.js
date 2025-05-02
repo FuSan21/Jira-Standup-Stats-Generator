@@ -1315,7 +1315,7 @@
 
   // Settings Management
   async function loadSettings() {
-    const savedSettings = localStorage.getItem("jiraStatsSettings");
+    const savedSettings = localStorage.getItem("jiraStandupSettings");
     let settings = savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS;
 
     settings.savedBoards = settings.savedBoards || DEFAULT_SETTINGS.savedBoards;
@@ -1339,7 +1339,7 @@
   }
 
   function saveSettings(newSettings) {
-    localStorage.setItem("jiraStatsSettings", JSON.stringify(newSettings));
+    localStorage.setItem("jiraStandupSettings", JSON.stringify(newSettings));
     settings = newSettings;
   }
 
