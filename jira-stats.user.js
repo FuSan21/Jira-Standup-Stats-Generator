@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.8.0
+// @version      0.8.1
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -15,7 +15,7 @@
 
   // Default values for settings
   const DEFAULT_SETTINGS = {
-    currentUser: "",
+    currentJiraUser: "",
     completeStatusTo: ["Ready for Peer Review"],
     inProgress: ["In Progress", "Ready For Work"],
     includeCancelled: false,
@@ -43,10 +43,10 @@
     settings.includeCancelled =
       settings.includeCancelled ?? DEFAULT_SETTINGS.includeCancelled;
 
-    if (!settings.currentUser || !settings.timezone) {
+    if (!settings.currentJiraUser || !settings.timezone) {
       try {
         const userData = await fetchCurrentUser();
-        settings.currentUser = userData.displayName;
+        settings.currentJiraUser = userData.displayName;
         settings.timezone = userData.timezone;
         localStorage.setItem("jiraStatsSettings", JSON.stringify(settings));
       } catch (error) {
@@ -89,7 +89,7 @@
     userLabel.style.fontSize = "12px";
     const userInput = document.createElement("input");
     userInput.type = "text";
-    userInput.value = settings.currentUser;
+    userInput.value = settings.currentJiraUser;
     userInput.style.cssText = `
       width: 100%;
       padding: 5px;
@@ -168,7 +168,7 @@
 
     saveButton.onclick = () => {
       const newSettings = {
-        currentUser: userInput.value,
+        currentJiraUser: userInput.value,
         completeStatusTo: toInput.value.split(",").map((s) => s.trim()),
         inProgress: inProgressInput.value.split(",").map((s) => s.trim()),
         includeCancelled: cancelledCheck.checked,
@@ -653,7 +653,8 @@
       const assignmentChange = changelog.values.find((change) =>
         change.items.some(
           (item) =>
-            item.field === "assignee" && item.toString === settings.currentUser
+            item.field === "assignee" &&
+            item.toString === settings.currentJiraUser
         )
       );
 
@@ -751,7 +752,7 @@
           return change.items.some((item) => {
             return (
               item.field === "status" &&
-              change.author.displayName === settings.currentUser &&
+              change.author.displayName === settings.currentJiraUser &&
               settings.completeStatusTo.includes(item.toString)
             );
           });
@@ -759,7 +760,7 @@
 
         if (!validStatusChange) {
           console.log(
-            `${key}: No valid status change by ${settings.currentUser} found`
+            `${key}: No valid status change by ${settings.currentJiraUser} found`
           );
           continue;
         }
