@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.1.0
+// @version      0.2.0
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -76,7 +76,7 @@
       // Convert the fetched ticket to match our format
       const ticket = {
         id: fetchedTicket.name,
-        name: "",
+        name: fetchedTicket.story || "",
         storyPoints: fetchedTicket.storyPoints || 0,
         status: fetchedTicket.status,
         story: fetchedTicket.story || "",
@@ -493,7 +493,7 @@
             storyPoints: update.savedTicket.storyPoints || 0,
             projectName: mappedProjectName,
             ticketType: update.savedTicket.ticketType,
-            story: update.savedTicket.story || "",
+            story: update.savedTicket.name || "",
             updatedAt: dateStr,
           };
 
@@ -574,6 +574,7 @@
             date: dateStr,
             raisedBy: settings.currentUser || "Jira User",
             storyPoints: ticket.storyPoints || 0,
+            story: ticket.name || "",
           };
 
           console.log(`Creating new ticket in AGT system:`, newTicketData);
