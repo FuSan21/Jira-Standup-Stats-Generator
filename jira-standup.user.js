@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.0
+// @version      0.2.1
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -1974,6 +1974,8 @@
       z-index: 10001;
       max-width: 600px;
       width: 90%;
+      overflow: auto;
+      max-height: 80vh;
     `;
 
     // Initialize board config if not exists
