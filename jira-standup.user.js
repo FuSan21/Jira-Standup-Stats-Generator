@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.2
+// @version      0.2.3
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -550,8 +550,14 @@
 
           const result = await updateTicketStatus(update.fetchedId, updateData);
 
-          // If the update was successful and the status is "Done", track for removal
-          if (updateData.status === "Done") {
+          // If the update was successful and the status is "Done" or "Cancelled", track for removal
+          if (
+            updateData.status === "Done" ||
+            updateData.status === "Cancelled"
+          ) {
+            console.log(
+              `Marking ticket ${update.savedTicket.id} with status "${updateData.status}" for removal`
+            );
             completedTicketIds.push(update.savedTicket.id);
           }
 
@@ -641,10 +647,10 @@
           const result = await createNewTicket(newTicketData);
           console.log(`Ticket created with ID: ${result.ticketId}`);
 
-          // If the ticket is created with "Done" status, track for removal
-          if (mappedStatus === "Done") {
+          // If the ticket is created with "Done" or "Cancelled" status, track for removal
+          if (mappedStatus === "Done" || mappedStatus === "Cancelled") {
             console.log(
-              `New ticket ${ticket.id} is already Done, marking for removal`
+              `New ticket ${ticket.id} with status "${mappedStatus}" marked for removal`
             );
             completedTicketIds.push(ticket.id);
           }
