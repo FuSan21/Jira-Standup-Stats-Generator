@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.1
+// @version      0.2.2
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -319,8 +319,7 @@
       }
     }
 
-    // If no mapping found, return original status
-    return currentStatus;
+    return null;
   }
 
   async function updateTicketStatus(ticketId, updateData) {
@@ -422,6 +421,7 @@
 
       // Find tickets that need updating
       const updatesNeeded = [];
+      const unmappedStatusTickets = [];
 
       // Tickets that exist in both systems that need updating
       fetchedTickets.forEach((fetchedTicket) => {
@@ -434,14 +434,26 @@
         // Map both statuses
         const mappedSavedStatus = boardConfig
           ? mapTicketStatus(savedTicket.status, boardConfig)
-          : savedTicket.status;
+          : null;
 
         const mappedFetchedStatus = boardConfig
           ? mapTicketStatus(fetchedTicket.status, boardConfig)
-          : fetchedTicket.status;
+          : null;
 
-        // Compare mapped statuses
-        if (mappedSavedStatus !== mappedFetchedStatus) {
+        // If the saved ticket status couldn't be mapped, add to unmapped list
+        if (mappedSavedStatus === null) {
+          unmappedStatusTickets.push({
+            ticket: savedTicket,
+            reason: `Status "${savedTicket.status}" not mapped in any board configuration`,
+          });
+          return;
+        }
+
+        // Compare mapped statuses (only if both are valid)
+        if (
+          mappedFetchedStatus !== null &&
+          mappedSavedStatus !== mappedFetchedStatus
+        ) {
           updatesNeeded.push({
             fetchedId: fetchedTicket._id,
             savedTicket: savedTicket,
@@ -453,16 +465,37 @@
 
       // Find tickets that exist in JIRA but not in the AGT system
       const ticketsToCreate = [];
+      const unmappedNewTickets = [];
+
       for (const savedTicket of settings.savedTickets) {
         if (!fetchedTicketsMap.has(savedTicket.id)) {
-          // This ticket exists in JIRA but not in AGT system
-          // Check if it's a duplicate before adding
-          ticketsToCreate.push(savedTicket);
+          // Find board config for this ticket to map its status
+          const boardConfig = findBoardConfigForTicket(savedTicket);
+
+          // Map the status if board config exists
+          const mappedStatus = boardConfig
+            ? mapTicketStatus(savedTicket.status, boardConfig)
+            : savedTicket.status;
+
+          // If status couldn't be mapped, add to unmapped list
+          if (mappedStatus === null) {
+            unmappedNewTickets.push({
+              ticket: savedTicket,
+              reason: `Status "${savedTicket.status}" not mapped in any board configuration`,
+            });
+          } else {
+            // This ticket exists in JIRA but not in AGT system
+            ticketsToCreate.push(savedTicket);
+          }
         }
       }
 
       console.log(
-        `Found ${updatesNeeded.length} tickets that need status updates and ${ticketsToCreate.length} tickets to create`
+        `Found ${updatesNeeded.length} tickets that need status updates, ${
+          ticketsToCreate.length
+        } tickets to create, and ${
+          unmappedStatusTickets.length + unmappedNewTickets.length
+        } tickets with unmapped statuses`
       );
 
       // Process updates sequentially
@@ -472,6 +505,17 @@
         failed: [],
       };
       const completedTicketIds = []; // Track completed ticket IDs
+
+      // Add unmapped status tickets to failed results
+      [...unmappedStatusTickets, ...unmappedNewTickets].forEach((item) => {
+        results.failed.push({
+          ticketId: item.ticket.id,
+          action: unmappedStatusTickets.includes(item) ? "update" : "create",
+          success: false,
+          error: item.reason,
+          status: item.ticket.status,
+        });
+      });
 
       // First, handle updates to existing tickets
       for (const update of updatesNeeded) {
@@ -562,7 +606,22 @@
           // Map the status if board config exists
           const mappedStatus = boardConfig
             ? mapTicketStatus(ticket.status, boardConfig)
-            : ticket.status;
+            : null;
+
+          // Skip if status couldn't be mapped (this should never happen as we filter these out earlier)
+          if (mappedStatus === null) {
+            console.log(
+              `Skipping ticket ${ticket.id} with unmapped status "${ticket.status}"`
+            );
+            results.failed.push({
+              ticketId: ticket.id,
+              action: "create",
+              success: false,
+              error: `Status "${ticket.status}" not mapped in any board configuration`,
+              status: ticket.status,
+            });
+            continue;
+          }
 
           // Create new ticket
           const newTicketData = {
@@ -570,7 +629,7 @@
             name: ticket.id,
             projectName: mappedProjectName,
             ticketType: ticket.ticketType,
-            status: mappedStatus, // Use mapped status instead of original status
+            status: mappedStatus,
             date: dateStr,
             raisedBy: settings.currentUser || "Jira User",
             storyPoints: ticket.storyPoints || 0,
@@ -686,10 +745,13 @@
         }
       }
 
+      // Add unmapped status statistics to the results
       return {
         totalUpdates: updatesNeeded.length,
         totalCreated: results.created.length,
         totalFailed: results.failed.length,
+        unmappedStatuses:
+          unmappedStatusTickets.length + unmappedNewTickets.length,
         successfulUpdates: results.updated.length,
         successfulCreations: results.created.length,
         completedRemoved: completedTicketIds.length,
@@ -967,10 +1029,26 @@
 
         const results = await pushTicketUpdates();
 
-        if (results.totalUpdates === 0 && results.totalCreated === 0) {
+        if (
+          results.totalUpdates === 0 &&
+          results.totalCreated === 0 &&
+          results.unmappedStatuses === 0
+        ) {
           pushButton.textContent = "✓ No updates needed";
         } else {
-          pushButton.textContent = `✓ Updated ${results.successfulUpdates}/${results.totalUpdates}, Created ${results.successfulCreations}`;
+          let buttonText = "✓ ";
+          if (results.successfulUpdates > 0 || results.totalUpdates > 0) {
+            buttonText += `Updated ${results.successfulUpdates}/${results.totalUpdates}`;
+          }
+          if (results.successfulCreations > 0) {
+            if (buttonText.length > 2) buttonText += ", ";
+            buttonText += `Created ${results.successfulCreations}`;
+          }
+          if (results.unmappedStatuses > 0) {
+            if (buttonText.length > 2) buttonText += ", ";
+            buttonText += `Skipped ${results.unmappedStatuses}`;
+          }
+          pushButton.textContent = buttonText;
 
           // Show detailed results in console
           console.log("Push results:", results.details);
@@ -990,6 +1068,22 @@
               .map((r) => `${r.ticketId}: Created with status ${r.status}`)
               .join("\n");
             console.log("Successfully created tickets:\n" + creationDetails);
+          }
+
+          // If there were unmapped statuses, show them in the console
+          const unmappedTickets = results.details.failed.filter(
+            (f) => f.error && f.error.includes("not mapped")
+          );
+          if (unmappedTickets.length > 0) {
+            const unmappedDetails = unmappedTickets
+              .map(
+                (r) =>
+                  `${r.ticketId}: ${r.status || "Unknown status"} (${r.error})`
+              )
+              .join("\n");
+            console.log(
+              "Tickets with unmapped statuses (skipped):\n" + unmappedDetails
+            );
           }
         }
 
