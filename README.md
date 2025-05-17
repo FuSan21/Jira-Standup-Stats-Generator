@@ -10,10 +10,12 @@ A collection of Tampermonkey scripts to enhance JIRA with statistics generation 
   - [Logic and Integration](#logic-and-integration-stand-up)
   - [API Integration](#api-integration-stand-up)
   - [UI Components](#ui-components-stand-up)
+  - [Screenshots](#screenshots-stand-up)
 - [JIRA Stats Script](#jira-stats-script)
   - [Features](#features-stats)
   - [Calculations and Logic](#calculations-and-logic-stats)
   - [API and Query Logic](#api-and-query-logic-stats)
+  - [Screenshots](#screenshots-stats)
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
 - [Notes](#notes)
@@ -156,6 +158,22 @@ Integrates JIRA with an external stand-up reporting system (`allgentech.io`) and
   - Allows adding custom column names.
 - **Add Ticket Buttons**: Injected into JIRA UI ("Your Work" lists, Ticket Details) to quickly add tickets to the saved list.
 
+<a id="screenshots-stand-up"></a>
+
+### Screenshots
+
+#### Saved Tickets Modal
+
+![Stand Up Tickets Modal](images/stand-up-1.png)
+
+#### Settings Configuration
+
+![Stand Up Settings](images/stand-up-2.png)
+
+#### Column Configuration
+
+![Stand Up Column Configuration](images/stand-up-3.png)
+
 ## JIRA Stats Script
 
 Adds a statistics panel to JIRA for tracking ticket progress and generating reports based on status changes.
@@ -212,6 +230,22 @@ Adds a statistics panel to JIRA for tracking ticket progress and generating repo
     ```
 - **Changelog API**: Uses `/rest/api/3/issue/{key}/changelog` for weekly stats to determine the assignment date for carryover/new ticket classification.
 - **User API**: Uses `/rest/api/latest/myself` to fetch the current user's display name and timezone for initial settings.
+
+<a id="screenshots-stats"></a>
+
+### Screenshots
+
+#### Weekly Statistics Panel
+
+![Stats Panel](images/stats-1.png)
+
+#### Daily Statistics Panel
+
+![Stats Panel](images/stats-2.png)
+
+#### Settings Configuration
+
+![Stats Settings](images/stats-3.png)
 
 ## Usage
 
