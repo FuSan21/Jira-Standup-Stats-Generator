@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.3
+// @version      0.2.4
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -300,9 +300,13 @@
 
   // Helper function to map ticket status based on board config
   function mapTicketStatus(currentStatus, boardConfig) {
+    // Convert current status to lowercase for case-insensitive comparison
+    const currentStatusLower = currentStatus.toLowerCase();
+
     // Check each category (inProgress, inQA, done, cancelled)
     for (const [category, columns] of Object.entries(boardConfig)) {
-      if (columns.includes(currentStatus)) {
+      // Check if any column matches the current status (case-insensitive)
+      if (columns.some((col) => col.toLowerCase() === currentStatusLower)) {
         // Map to standardized status names
         switch (category) {
           case "inProgress":
@@ -801,9 +805,11 @@
       const boardConfig = settings.boardConfigs[board.id];
       if (!boardConfig) return false;
 
-      // Check if the status exists in any category
+      // Check if the status exists in any category (case-insensitive)
       return Object.values(boardConfig).some((statuses) =>
-        statuses.includes(currentStatus)
+        statuses.some(
+          (status) => status.toLowerCase() === currentStatus.toLowerCase()
+        )
       );
     });
 
