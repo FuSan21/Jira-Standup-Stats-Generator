@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.4
+// @version      0.2.5
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -440,9 +440,7 @@
           ? mapTicketStatus(savedTicket.status, boardConfig)
           : null;
 
-        const mappedFetchedStatus = boardConfig
-          ? mapTicketStatus(fetchedTicket.status, boardConfig)
-          : null;
+        const mappedFetchedStatus = fetchedTicket.status;
 
         // If the saved ticket status couldn't be mapped, add to unmapped list
         if (mappedSavedStatus === null) {
@@ -453,10 +451,9 @@
           return;
         }
 
-        // Compare mapped statuses (only if both are valid)
+        // Compare mapped saved status with fetched status (case-insensitive)
         if (
-          mappedFetchedStatus !== null &&
-          mappedSavedStatus !== mappedFetchedStatus
+          mappedSavedStatus.toLowerCase() !== mappedFetchedStatus.toLowerCase()
         ) {
           updatesNeeded.push({
             fetchedId: fetchedTicket._id,
