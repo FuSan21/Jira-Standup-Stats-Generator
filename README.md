@@ -70,7 +70,7 @@ Ensure both scripts are enabled in the Tampermonkey dashboard (click the Tamperm
 4.  **Stand Up Script**: Click the scroll icon (📜), then the gear icon (⚙️) inside the modal.
     - Enter your User Name, Team Name, and API Key from AGT website's profile section.
     - Select the boards you work with under "Manage Boards".
-    - Configure column mappings for each selected board by clicking its gear icon (⚙️). Ensure you map your JIRA statuses correctly to "In Progress", "In QA", "Blocked", "Done", and "Cancelled". Verify/enter the Story Points Field ID.
+    - Configure column mappings for each selected board by clicking its gear icon (⚙️). Ensure you map your JIRA statuses correctly to "In Progress", "Blocked", "In QA", "Done", and "Cancelled". Verify/enter the Story Points Field ID.
     - Configure project name mappings under "Manage Projects" if needed.
     - Click Save.
 
@@ -92,7 +92,7 @@ Integrates JIRA with an external stand-up reporting system (`allgentech.io`) and
   - **Push**: Update ticket statuses, story points, and other details in the `allgentech.io` system based on the current state in JIRA. Creates new tickets in the external system if they don't exist. Automatically removes "Done" tickets from the local list after a successful push.
 - **Board & Project Configuration**:
   - Fetch and select relevant JIRA Agile boards.
-  - Configure status mappings (In Progress, In QA, Blocked, Done, Cancelled) for each selected board to standardize statuses sent to the external API.
+  - Configure status mappings (In Progress, Blocked, In QA, Done, Cancelled) for each selected board to standardize statuses sent to the external API.
   - Configure the custom field ID used for Story Points per board (attempts auto-detection).
   - Map JIRA project names to different names used in the `allgentech.io` system.
 - **Configurable Settings**:
@@ -154,7 +154,7 @@ Integrates JIRA with an external stand-up reporting system (`allgentech.io`) and
 - **Column Configuration Modal**:
   - Opened via the configure (⚙️) button for a board in the Settings Modal.
   - Allows configuration of the Story Points Field ID for the board.
-  - Shows available columns and allows assigning them to categories (In Progress, In QA, Blocked, Done, Cancelled) via drag-and-drop or selection modals.
+  - Shows available columns and allows assigning them to categories (In Progress, Blocked, In QA, Done, Cancelled) via drag-and-drop or selection modals.
   - Allows adding custom column names.
 - **Add Ticket Buttons**: Injected into JIRA UI ("Your Work" lists, Ticket Details) to quickly add tickets to the saved list.
 

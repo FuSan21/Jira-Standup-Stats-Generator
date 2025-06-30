@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.6
+// @version      0.2.7
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -272,8 +272,8 @@
     // Merge configs from all matching boards
     const mergedConfig = {
       inProgress: [],
-      inQA: [],
       blocked: [],
+      inQA: [],
       done: [],
       cancelled: [],
     };
@@ -304,7 +304,7 @@
     // Convert current status to lowercase for case-insensitive comparison
     const currentStatusLower = currentStatus.toLowerCase();
 
-    // Check each category (inProgress, inQA, blocked, done, cancelled)
+    // Check each category (inProgress, blocked, inQA, done, cancelled)
     for (const [category, columns] of Object.entries(boardConfig)) {
       // Check if any column matches the current status (case-insensitive)
       if (columns.some((col) => col.toLowerCase() === currentStatusLower)) {
@@ -2100,8 +2100,8 @@
     if (!settings.boardConfigs[board.id]) {
       settings.boardConfigs[board.id] = {
         inProgress: [],
-        inQA: [],
         blocked: [],
+        inQA: [],
         done: [],
         cancelled: [],
       };
@@ -2248,8 +2248,8 @@
     // Create categories
     const categories = [
       { key: "inProgress", label: "In Progress" },
-      { key: "inQA", label: "In QA" },
       { key: "blocked", label: "Blocked" },
+      { key: "inQA", label: "In QA" },
       { key: "done", label: "Done" },
       { key: "cancelled", label: "Cancelled" },
     ];
