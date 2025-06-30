@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.5
+// @version      0.2.6
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -273,6 +273,7 @@
     const mergedConfig = {
       inProgress: [],
       inQA: [],
+      blocked: [],
       done: [],
       cancelled: [],
     };
@@ -303,7 +304,7 @@
     // Convert current status to lowercase for case-insensitive comparison
     const currentStatusLower = currentStatus.toLowerCase();
 
-    // Check each category (inProgress, inQA, done, cancelled)
+    // Check each category (inProgress, inQA, blocked, done, cancelled)
     for (const [category, columns] of Object.entries(boardConfig)) {
       // Check if any column matches the current status (case-insensitive)
       if (columns.some((col) => col.toLowerCase() === currentStatusLower)) {
@@ -313,6 +314,8 @@
             return "In Progress";
           case "inQA":
             return "In QA";
+          case "blocked":
+            return "Blocked";
           case "done":
             return "Done";
           case "cancelled":
@@ -1438,6 +1441,18 @@
     settings.currentUser = settings.currentUser || DEFAULT_SETTINGS.currentUser;
     settings.teamName = settings.teamName || DEFAULT_SETTINGS.teamName;
 
+    // Migration: Add "blocked" array to existing board configurations
+    if (settings.boardConfigs) {
+      Object.keys(settings.boardConfigs).forEach((boardId) => {
+        if (
+          settings.boardConfigs[boardId] &&
+          !settings.boardConfigs[boardId].blocked
+        ) {
+          settings.boardConfigs[boardId].blocked = [];
+        }
+      });
+    }
+
     return settings;
   }
 
@@ -2086,6 +2101,7 @@
       settings.boardConfigs[board.id] = {
         inProgress: [],
         inQA: [],
+        blocked: [],
         done: [],
         cancelled: [],
       };
@@ -2233,6 +2249,7 @@
     const categories = [
       { key: "inProgress", label: "In Progress" },
       { key: "inQA", label: "In QA" },
+      { key: "blocked", label: "Blocked" },
       { key: "done", label: "Done" },
       { key: "cancelled", label: "Cancelled" },
     ];
