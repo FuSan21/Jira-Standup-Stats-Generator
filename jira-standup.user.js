@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.2.7
+// @version      0.2.9
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -1465,15 +1465,37 @@
   function createHeaderButton() {
     const container = document.createElement("div");
     container.setAttribute("role", "listitem");
-    container.className = "css-bjn8wh";
+    container.className = "_kqswh2mm _1e0c1txw";
 
     const button = document.createElement("button");
-    button.className = "css-oshqpj";
+    button.className =
+      "_mizu194a _1ah31bk5 _ra3xnqa1 _128m1bk5 _1cvmnqa1 _4davt94y _19itglyw _vchhusvi _r06hglyw _80omtlke _2rkosqtm _11c82smr _v5649dqc _189eidpf _1rjc12x7 _1e0c116y _1bsbviql _p12f1osq _kqswh2mm _4cvr1q9y _1bah1h6o _gy1p1b66 _1o9zidpf _4t3iviql _k48p1wq8 _y4tize3t _bozgze3t _y3gn1h6o _s7n4nkob _14mj1kw7 _9v7aze3t _1tv3nqa1 _39yqe4h9 _11fnglyw _18postnw _bfhk1w7a _syaz1gjq _10531gjq _f8pj1gjq _30l31gjq _9h8h1gjq _irr34mfv _1di619qy _4bfu18uv _1hmsglyw _ajmmnqa1 _1a3b18uv _4fprglyw _5goinqa1 _9oik18uv _1bnxglyw _jf4cnqa1 _1nrm18uv _c2waglyw _1iohnqa1";
     button.setAttribute("aria-label", "Tickets");
     button.setAttribute("tabindex", "0");
     button.setAttribute("type", "button");
-    button.innerHTML = "📜";
 
+    // Create spans for icon structure
+    const outerSpan = document.createElement("span");
+    outerSpan.className =
+      "_v564g17y _1e0c1txw _16jlidpf _1o9zidpf _1wpz1h6o _1wybidpf _vwz4idpf _uiztglyw";
+
+    const iconSpan = document.createElement("span");
+    iconSpan.setAttribute("aria-hidden", "true");
+    iconSpan.style.cssText =
+      "color: currentcolor; font-size: 16px; display: inline-block; width: 16px; height: 16px; line-height: 16px; text-align: center;";
+    iconSpan.className =
+      "_1e0c1o8l _vchhusvi _1o9zidpf _vwz4kb7n _y4ti1igz _bozg1mb9 _12va18uv _jcxd1r8n";
+    iconSpan.innerHTML = "📜";
+
+    const textSpan = document.createElement("span");
+    textSpan.className =
+      "_ca0qidpf _u5f3idpf _n3tdidpf _19bvidpf _19itidpf _1reo15vq _18m915vq _1bsbt94y _4t3it94y _kqswstnw _ogto7mnp _uiztglyw _o5721q9c";
+    textSpan.textContent = "Tickets";
+
+    // Assemble the structure
+    outerSpan.appendChild(iconSpan);
+    outerSpan.appendChild(textSpan);
+    button.appendChild(outerSpan);
     container.appendChild(button);
     return container;
   }
@@ -2633,10 +2655,10 @@
   // New helper function to handle button injection
   function injectSettingsButton() {
     const actionsList = document.querySelector(
-      '[data-vc="atlassian-navigation-secondary-actions"]'
+      'nav[aria-label="Actions"] div[role="list"]'
     );
     const existingButton = actionsList?.querySelector(
-      '.css-bjn8wh button[aria-label="Tickets"]'
+      'div[role="listitem"] button[aria-label="Tickets"]'
     );
 
     if (actionsList && !existingButton) {

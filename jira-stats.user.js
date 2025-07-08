@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stats
 // @namespace    https://www.fusan.live
-// @version      0.8.1
+// @version      0.8.4
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -206,7 +206,7 @@
 
   // Wait for page to be fully loaded and stable
   function waitForHeader() {
-    const headerSelector = '[data-vc="atlassian-navigation-secondary-actions"]';
+    const headerSelector = 'nav[aria-label="Actions"] div[role="list"]';
     const maxAttempts = 10;
     let attempts = 0;
 
@@ -926,91 +926,62 @@
     // Create the outer container structure
     const container = document.createElement("div");
     container.setAttribute("role", "listitem");
-    container.className = "css-bjn8wh";
+    container.className = "_kqswh2mm _1e0c1txw";
 
-    const presentation = document.createElement("div");
-    presentation.setAttribute("role", "presentation");
-
-    // Create the button with JIRA's styling
     const button = document.createElement("button");
-    button.className = "css-oshqpj";
+    button.className =
+      "_mizu194a _1ah31bk5 _ra3xnqa1 _128m1bk5 _1cvmnqa1 _4davt94y _19itglyw _vchhusvi _r06hglyw _80omtlke _2rkosqtm _11c82smr _v5649dqc _189eidpf _1rjc12x7 _1e0c116y _1bsbviql _p12f1osq _kqswh2mm _4cvr1q9y _1bah1h6o _gy1p1b66 _1o9zidpf _4t3iviql _k48p1wq8 _y4tize3t _bozgze3t _y3gn1h6o _s7n4nkob _14mj1kw7 _9v7aze3t _1tv3nqa1 _39yqe4h9 _11fnglyw _18postnw _bfhk1w7a _syaz1gjq _10531gjq _f8pj1gjq _30l31gjq _9h8h1gjq _irr34mfv _1di619qy _4bfu18uv _1hmsglyw _ajmmnqa1 _1a3b18uv _4fprglyw _5goinqa1 _9oik18uv _1bnxglyw _jf4cnqa1 _1nrm18uv _c2waglyw _1iohnqa1";
     button.setAttribute("aria-label", "Statistics");
     button.setAttribute("tabindex", "0");
     button.setAttribute("type", "button");
 
     // Create spans for icon structure
     const outerSpan = document.createElement("span");
-    outerSpan.className = "css-bwxjrz";
+    outerSpan.className =
+      "_v564g17y _1e0c1txw _16jlidpf _1o9zidpf _1wpz1h6o _1wybidpf _vwz4idpf _uiztglyw";
 
     const iconSpan = document.createElement("span");
-    iconSpan.setAttribute("data-vc", "icon-undefined");
-    iconSpan.setAttribute("role", "img");
-    iconSpan.setAttribute("aria-label", "Statistics");
-    iconSpan.className = "css-snhnyn";
-    iconSpan.style.cssText = `
-        --icon-primary-color: currentColor;
-        --icon-secondary-color: var(--ds-surface, #FFFFFF);
-    `;
+    iconSpan.setAttribute("aria-hidden", "true");
+    iconSpan.style.cssText =
+      "color: currentcolor; font-size: 16px; display: inline-block; width: 16px; height: 16px; line-height: 16px; text-align: center;";
+    iconSpan.className =
+      "_1e0c1o8l _vchhusvi _1o9zidpf _vwz4kb7n _y4ti1igz _bozg1mb9 _12va18uv _jcxd1r8n";
+    iconSpan.innerHTML = "📊";
 
-    // Create SVG icon
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("width", "24");
-    svg.setAttribute("height", "24");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("role", "presentation");
-    svg.setAttribute("fill", "none");
-
-    // Create paths for the chart icon
-    const path1 = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "path"
-    );
-    path1.setAttribute("fill", "currentcolor");
-    path1.setAttribute(
-      "d",
-      "M1 2C1 1.44772 1.44772 1 2 1C2.55228 1 3 1.44772 3 2V20C3 20.5523 3.44771 21 4 21L22 21C22.5523 21 23 21.4477 23 22C23 22.5523 22.5523 23 22 23H3C1.89543 23 1 22.1046 1 21V2Z"
-    );
-
-    const path2 = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "path"
-    );
-    path2.setAttribute("fill", "currentcolor");
-    path2.setAttribute(
-      "d",
-      "M19.9285 5.37139C20.1336 4.85861 19.8842 4.27664 19.3714 4.07152C18.8586 3.86641 18.2766 4.11583 18.0715 4.62861L14.8224 12.7513C14.6978 13.0628 14.3078 13.1656 14.0459 12.9561L11.0811 10.5843C10.3619 10.0089 9.29874 10.2116 8.84174 11.0114L5.13176 17.5039C4.85775 17.9834 5.02434 18.5942 5.50386 18.8682C5.98338 19.1423 6.59423 18.9757 6.86824 18.4961L9.9982 13.0187C10.1505 12.7521 10.5049 12.6846 10.7447 12.8764L13.849 15.3598C14.635 15.9886 15.805 15.6802 16.1788 14.7456L19.9285 5.37139Z"
-    );
+    const textSpan = document.createElement("span");
+    textSpan.className =
+      "_ca0qidpf _u5f3idpf _n3tdidpf _19bvidpf _19itidpf _1reo15vq _18m915vq _1bsbt94y _4t3it94y _kqswstnw _ogto7mnp _uiztglyw _o5721q9c";
+    textSpan.textContent = "Statistics";
 
     // Assemble the structure
-    svg.appendChild(path1);
-    svg.appendChild(path2);
-    iconSpan.appendChild(svg);
     outerSpan.appendChild(iconSpan);
+    outerSpan.appendChild(textSpan);
     button.appendChild(outerSpan);
-    presentation.appendChild(button);
-    container.appendChild(presentation);
+    container.appendChild(button);
 
     return container;
   }
 
   // Main function
   function init() {
-    // Find the secondary actions list
+    console.log("Statistics: Attempting to inject button");
+    // Find the secondary actions list using the new structure
     const actionsList = document.querySelector(
-      '[data-vc="atlassian-navigation-secondary-actions"]'
+      'nav[aria-label="Actions"] div[role="list"]'
     );
     if (!actionsList) {
-      console.error("Could not find secondary actions list");
+      console.error("Statistics: Could not find secondary actions list");
       return;
     }
 
     // Check if button already exists
     if (actionsList.querySelector('[aria-label="Statistics"]')) {
-      console.log("Statistics button already exists, skipping injection");
+      console.log("Statistics: Button already exists, skipping injection");
       return;
     }
 
     // Insert button before the notifications container
+    console.log("Statistics: Injecting button");
     const statsButton = createHeaderButton();
     actionsList.insertBefore(statsButton, actionsList.firstChild);
 
@@ -1061,13 +1032,13 @@
 
       // Check if we need to reinject the button
       const actionsList = document.querySelector(
-        '[data-vc="atlassian-navigation-secondary-actions"]'
+        'nav[aria-label="Actions"] div[role="list"]'
       );
       if (
         actionsList &&
         !actionsList.querySelector('[aria-label="Statistics"]')
       ) {
-        console.log("Reinjecting stats button after page change");
+        console.log("Statistics: Reinjecting stats button after page change");
         init();
       }
 
