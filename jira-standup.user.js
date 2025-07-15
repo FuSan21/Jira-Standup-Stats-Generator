@@ -2469,7 +2469,7 @@
     const currentlySelectedColumns = new Set(selectedColumns);
 
     // Show columns that aren't in current category
-    allColumns.forEach((column) => {
+    allColumns.forEach((column, index) => {
       if (!currentlySelectedColumns.has(column.name)) {
         const row = document.createElement("div");
         row.style.marginBottom = "8px";
@@ -2477,11 +2477,11 @@
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = column.name;
-        checkbox.id = `col-${column.id}`;
+        checkbox.id = `col-${column.id}-${Date.now()}-${index}`;
         checkbox.style.marginRight = "8px";
 
         const label = document.createElement("label");
-        label.htmlFor = `col-${column.id}`;
+        label.htmlFor = `col-${column.id}-${Date.now()}-${index}`;
         label.textContent = column.name;
 
         row.appendChild(checkbox);
