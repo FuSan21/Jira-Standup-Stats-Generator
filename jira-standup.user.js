@@ -717,7 +717,7 @@
                 const info = document.createElement("div");
                 info.innerHTML = `
                   <div><strong>${ticket.id}</strong> - ${ticket.name}</div>
-                  <div style="font-size: 12px; color: #666;">
+                  <div style="font-size: 12px; color: var(--ds-text-subtlest,#626f86);">
                     ${ticket.projectName} • ${ticket.ticketType} • ${
                   ticket.status
                 } 
@@ -732,7 +732,7 @@
                 removeBtn.style.cssText = `
                   border: none;
                   background: none;
-                  color: #666;
+                  color: var(--ds-text-subtlest,#626f86);;
                   cursor: pointer;
                   padding: 5px;
                   font-size: 16px;
@@ -1175,7 +1175,7 @@
         const info = document.createElement("div");
         info.innerHTML = `
           <div><strong>${ticket.id}</strong> - ${ticket.name}</div>
-          <div style="font-size: 12px; color: #666;">
+          <div style="font-size: 12px; color: var(--ds-text-subtlest,#626f86);">
             ${ticket.projectName} • ${ticket.ticketType} • ${ticket.status} 
             ${ticket.storyPoints ? `• ${ticket.storyPoints} points` : ""}
           </div>
@@ -1186,7 +1186,7 @@
         removeBtn.style.cssText = `
           border: none;
           background: none;
-          color: #666;
+          color: var(--ds-text-subtlest,#626f86);;
           cursor: pointer;
           padding: 5px;
           font-size: 16px;
@@ -1508,13 +1508,13 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: white;
       padding: 20px;
       border-radius: 5px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      box-shadow: var(--ds-shadow-raised,0 1px 1px #091e4240,0 0 1px #091e424f);
       z-index: 10000;
       max-width: 800px;
       width: 90%;
+      background-color: var(--ds-surface, #fff);
     `;
 
     // Header with title, settings and close buttons
@@ -1561,7 +1561,7 @@
       cursor: pointer;
       font-size: 20px;
       padding: 4px 8px;
-      color: #666;
+      color: var(--ds-text-subtlest,#626f86);;
       line-height: 1;
     `;
 
@@ -1599,13 +1599,13 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: white;
         padding: 20px;
         border-radius: 5px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        box-shadow: var(--ds-shadow-raised,0 1px 1px #091e4240,0 0 1px #091e424f);
         z-index: 10000;
         max-width: 800px;
         width: 90%;
+        background-color: var(--ds-surface, #fff);
       `;
 
     // Add title
@@ -1784,7 +1784,7 @@
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
     headerRow.style.cssText = `
-        background: #f4f5f7;
+        background: var(--ds-background-neutral,#091e420f) !important;
         font-weight: 500;
     `;
 
@@ -2056,7 +2056,7 @@
     cancelButton.textContent = "Cancel";
     cancelButton.style.cssText = `
         padding: 8px 16px;
-        background: white;
+        background: var(--ds-background-neutral,#091e420f);
         border: 1px solid #ccc;
         border-radius: 4px;
         cursor: pointer;
@@ -2107,10 +2107,10 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: white;
+      background-color: var(--ds-surface, #fff);
       padding: 20px;
       border-radius: 5px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      box-shadow: var(--ds-shadow-raised,0 1px 1px #091e4240,0 0 1px #091e424f);
       z-index: 10001;
       max-width: 600px;
       width: 90%;
@@ -2184,7 +2184,7 @@
     const helpText = document.createElement("div");
     helpText.style.cssText = `
       font-size: 12px;
-      color: #666;
+      color: var(--ds-text-subtlest,#626f86);;
       margin-top: 5px;
     `;
     helpText.innerHTML = `
@@ -2406,7 +2406,7 @@
       justify-content: space-between;
       align-items: center;
       padding: 5px 8px;
-      background: #f4f5f7;
+      background: var(--ds-background-neutral,#091e420f);
       border-radius: 3px;
       font-size: 13px;
     `;
@@ -2419,7 +2419,7 @@
     removeButton.style.cssText = `
       border: none;
       background: none;
-      color: #666;
+      color: var(--ds-text-subtlest,#626f86);;
       cursor: pointer;
       padding: 0 5px;
       font-size: 16px;
@@ -2444,10 +2444,10 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: white;
+      background-color: var(--ds-surface, #fff);
       padding: 20px;
       border-radius: 5px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      box-shadow: var(--ds-shadow-raised,0 1px 1px #091e4240,0 0 1px #091e424f);
       z-index: 10002;
       width: 300px;
     `;
@@ -2553,7 +2553,7 @@
     cancelButton.textContent = "Cancel";
     cancelButton.style.cssText = `
       padding: 6px 12px;
-      background: white;
+      background: var(--ds-background-neutral,#091e420f);
       border: 1px solid #ccc;
       border-radius: 3px;
       cursor: pointer;
@@ -2614,7 +2614,7 @@
     cancelButton.textContent = "Cancel";
     cancelButton.style.cssText = `
       padding: 8px 16px;
-      background: white;
+      background: var(--ds-background-neutral,#091e420f);
       border: 1px solid #ccc;
       border-radius: 4px;
       cursor: pointer;
