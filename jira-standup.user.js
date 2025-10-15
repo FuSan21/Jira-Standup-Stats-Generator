@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.3.0
+// @version      0.4.0
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -61,6 +61,71 @@
   };
 
   let settings = null;
+
+  // Auto-sync constants and storage keys
+  const AUTO_STATE_KEY = "jiraStandup.auto"; // { lastSyncAt:number, lock:{owner:string, expiresAt:number} }
+  const SYNC_CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10m
+  const INITIAL_SYNC_DEFER_MS = 30 * 1000; // first-load delay
+  const SYNC_LOCK_TTL_MS = 2 * 60 * 1000; // 2m
+  const SYNC_HEARTBEAT_MS = 30 * 1000; // 30s
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  // Auto state helpers
+  function readAutoState() {
+    try {
+      const raw = localStorage.getItem(AUTO_STATE_KEY);
+      return raw ? JSON.parse(raw) : { lastSyncAt: 0, lock: null };
+    } catch (e) {
+      return { lastSyncAt: 0, lock: null };
+    }
+  }
+
+  function writeAutoState(next) {
+    localStorage.setItem(AUTO_STATE_KEY, JSON.stringify(next));
+  }
+
+  function generateOwnerId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function tryAcquireSyncLock() {
+    const ownerId = generateOwnerId();
+    const now = Date.now();
+    const state = readAutoState();
+    const lock = state.lock;
+    if (lock && lock.expiresAt && lock.expiresAt > now) {
+      return null; // another tab holds a fresh lock
+    }
+    const newState = {
+      ...state,
+      lock: { owner: ownerId, expiresAt: now + SYNC_LOCK_TTL_MS },
+    };
+    writeAutoState(newState);
+
+    // verify lock ownership to avoid race
+    const verify = readAutoState();
+    if (!verify.lock || verify.lock.owner !== ownerId) return null;
+
+    let released = false;
+    const release = () => {
+      if (released) return;
+      const cur = readAutoState();
+      if (cur.lock && cur.lock.owner === ownerId) {
+        writeAutoState({ ...cur, lock: null });
+      }
+      released = true;
+    };
+    const renew = () => {
+      const cur = readAutoState();
+      if (cur.lock && cur.lock.owner === ownerId) {
+        writeAutoState({
+          ...cur,
+          lock: { owner: ownerId, expiresAt: Date.now() + SYNC_LOCK_TTL_MS },
+        });
+      }
+    };
+    return { owner: ownerId, release, renew };
+  }
 
   function mergeTickets(savedTickets, fetchedTickets) {
     const mergedTickets = [...savedTickets]; // Start with existing saved tickets
@@ -876,6 +941,8 @@
       if (!exists) {
         settings.savedTickets.push(ticket);
         saveSettings(settings);
+        // Trigger immediate sync attempt (respects autoSyncEnabled)
+        triggerSyncSoon(0);
       }
 
       return ticket;
@@ -922,62 +989,37 @@
       gap: 8px;
     `;
 
-    // Add refresh button
-    const refreshButton = document.createElement("button");
-    refreshButton.textContent = "↻ Refresh All";
-    refreshButton.style.cssText = `
-      padding: 5px 10px;
-      background: #EBECF0;
-      color: #42526E;
-      border: none;
+    // Auto-sync toggle (before Refresh All)
+    const autoToggleWrapper = document.createElement("label");
+    autoToggleWrapper.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: #F4F5F7;
       border-radius: 3px;
-      cursor: pointer;
+      color: #42526E;
     `;
-
-    refreshButton.onclick = async () => {
-      try {
-        refreshButton.disabled = true;
-        refreshButton.textContent = "Refreshing...";
-
-        // Create a copy of saved tickets array
-        const ticketsToRefresh = [...settings.savedTickets];
-        const refreshedTickets = [];
-
-        // Refresh each ticket
-        for (const ticket of ticketsToRefresh) {
-          try {
-            // Try to refresh the ticket and store the result
-            const refreshedTicket = await addTicket(ticket.id);
-            refreshedTickets.push(refreshedTicket);
-          } catch (error) {
-            console.error(`Failed to refresh ticket ${ticket.id}:`, error);
-            // Keep the original ticket data if refresh fails
-            refreshedTickets.push(ticket);
-          }
-        }
-
-        // Update settings only after all refreshes are attempted
-        settings.savedTickets = refreshedTickets;
-        saveSettings(settings);
-
-        refreshTicketsList(ticketsList);
-        refreshButton.textContent = "✓ Refreshed";
-        setTimeout(() => {
-          refreshButton.textContent = "↻ Refresh All";
-          refreshButton.disabled = false;
-        }, 2000);
-      } catch (error) {
-        console.error("Error refreshing tickets:", error);
-        refreshButton.textContent = "× Error";
-        setTimeout(() => {
-          refreshButton.textContent = "↻ Refresh All";
-          refreshButton.disabled = false;
-        }, 2000);
-      }
+    autoToggleWrapper.title =
+      "Enable automatic refresh and push: checks every 10 minutes, triggers once per 24 hours (rolling), first check is delayed by 30 seconds after page load.";
+    const autoToggle = document.createElement("input");
+    autoToggle.type = "checkbox";
+    autoToggle.checked = !!settings.autoSyncEnabled;
+    autoToggle.onchange = () => {
+      settings.autoSyncEnabled = !!autoToggle.checked;
+      saveSettings(settings);
     };
+    const autoLabel = document.createElement("span");
+    autoLabel.textContent = "Auto Sync";
+    autoToggleWrapper.appendChild(autoToggle);
+    autoToggleWrapper.appendChild(autoLabel);
+
+    // We will move Refresh All into a 3-dot dropdown menu
 
     const syncButton = document.createElement("button");
-    syncButton.textContent = "🔄📥 Pull Tickets";
+    syncButton.textContent = "🌐📥 Pull Tickets";
+    syncButton.title =
+      "Pull tickets from AGT for today and merge into Saved Tickets";
     syncButton.style.cssText = `
                   padding: 5px 10px;
                   background: #EBECF0;
@@ -1024,7 +1066,9 @@
 
     // Add this after the sync button creation in createTicketsUI
     const pushButton = document.createElement("button");
-    pushButton.textContent = "📤🌐 Push Tickets";
+    pushButton.textContent = "🔄📤 Refresh and Push Tickets";
+    pushButton.title =
+      "Refresh all saved tickets from JIRA, then push updates to AGT (uses concurrency lock)";
     pushButton.style.cssText = `
       padding: 5px 10px;
       background: #EBECF0;
@@ -1037,82 +1081,15 @@
     pushButton.onclick = async () => {
       try {
         pushButton.disabled = true;
-        pushButton.textContent = "Pushing...";
-
-        const results = await pushTicketUpdates();
-
-        if (
-          results.totalUpdates === 0 &&
-          results.totalCreated === 0 &&
-          results.unmappedStatuses === 0
-        ) {
-          pushButton.textContent = "✓ No updates needed";
-        } else {
-          let buttonText = "✓ ";
-          if (results.successfulUpdates > 0 || results.totalUpdates > 0) {
-            buttonText += `Updated ${results.successfulUpdates}/${results.totalUpdates}`;
-          }
-          if (results.successfulCreations > 0) {
-            if (buttonText.length > 2) buttonText += ", ";
-            buttonText += `Created ${results.successfulCreations}`;
-          }
-          if (results.unmappedStatuses > 0) {
-            if (buttonText.length > 2) buttonText += ", ";
-            buttonText += `Skipped ${results.unmappedStatuses}`;
-          }
-          pushButton.textContent = buttonText;
-
-          // Show detailed results in console
-          console.log("Push results:", results.details);
-
-          // If there were successful updates, show summary
-          if (results.successfulUpdates > 0) {
-            const successDetails = results.details.updated
-              .filter((r) => r.success)
-              .map((r) => `${r.ticketId}: ${r.oldStatus} → ${r.newStatus}`)
-              .join("\n");
-            console.log("Successfully updated tickets:\n" + successDetails);
-          }
-
-          // If there were successful creations, show summary
-          if (results.successfulCreations > 0) {
-            const creationDetails = results.details.created
-              .map((r) => `${r.ticketId}: Created with status ${r.status}`)
-              .join("\n");
-            console.log("Successfully created tickets:\n" + creationDetails);
-          }
-
-          // If there were unmapped statuses, show them in the console
-          const unmappedTickets = results.details.failed.filter(
-            (f) => f.error && f.error.includes("not mapped")
-          );
-          if (unmappedTickets.length > 0) {
-            const unmappedDetails = unmappedTickets
-              .map(
-                (r) =>
-                  `${r.ticketId}: ${r.status || "Unknown status"} (${r.error})`
-              )
-              .join("\n");
-            console.log(
-              "Tickets with unmapped statuses (skipped):\n" + unmappedDetails
-            );
-          }
-        }
-
-        // If there were any failures, show alert
-        if (results.totalFailed > 0) {
-          console.error("Failed operations:", results.details.failed);
-          alert(
-            `Failed ${results.totalFailed} operations. Check console for details.`
-          );
-        }
-
+        pushButton.textContent = "Syncing...";
+        await runDailySyncIfNeeded("immediate");
+        pushButton.textContent = "✓ Sync triggered";
         setTimeout(() => {
           pushButton.textContent = "📤🌐 Push Tickets";
           pushButton.disabled = false;
         }, 2000);
       } catch (error) {
-        console.error("Error pushing tickets:", error);
+        console.error("Error triggering sync:", error);
         pushButton.textContent = "× Error";
         setTimeout(() => {
           pushButton.textContent = "📤🌐 Push Tickets";
@@ -1123,6 +1100,7 @@
 
     const addButton = document.createElement("button");
     addButton.textContent = "+ Add Ticket";
+    addButton.title = "Add a JIRA ticket (e.g., AEPT-287) to Saved Tickets";
     addButton.style.cssText = `
       padding: 5px 10px;
       background: #0052CC;
@@ -1144,11 +1122,141 @@
       }
     };
 
-    // Append buttons to container
-    buttonsContainer.appendChild(refreshButton);
+    // 3-dot dropdown menu for additional actions (right-most)
+    const moreWrapper = document.createElement("div");
+    moreWrapper.style.cssText = `position: relative; display: inline-block;`;
+    const moreBtn = document.createElement("button");
+    moreBtn.textContent = "⋮";
+    moreBtn.title = "More actions";
+    moreBtn.style.cssText = `
+      padding: 5px 10px;
+      background: #EBECF0;
+      color: #42526E;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    `;
+    const menu = document.createElement("div");
+    menu.style.cssText = `
+      display: none;
+      position: absolute;
+      right: 0;
+      margin-top: 6px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: var(--ds-shadow-raised,0 1px 1px #091e4240,0 0 1px #091e424f);
+      min-width: 220px;
+      z-index: 10001;
+    `;
+
+    function addMenuItem(label, onClick, tooltip) {
+      const item = document.createElement("button");
+      item.textContent = label;
+      if (tooltip) item.title = tooltip;
+      item.style.cssText = `
+        width: 100%;
+        text-align: left;
+        padding: 8px 12px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #42526E;
+      `;
+      item.onmouseover = () => (item.style.background = "#F4F5F7");
+      item.onmouseleave = () => (item.style.background = "transparent");
+      item.onclick = async () => {
+        menu.style.display = "none";
+        await onClick(item);
+      };
+      menu.appendChild(item);
+    }
+
+    // Menu item: Refresh All (old logic but via extracted function)
+    addMenuItem(
+      "↻ Refresh All",
+      async (btn) => {
+        try {
+          btn.disabled = true;
+          btn.textContent = "Refreshing...";
+          await refreshAllSavedTickets();
+          refreshTicketsList(ticketsList);
+          btn.textContent = "✓ Refreshed";
+        } catch (e) {
+          console.error("Error refreshing tickets:", e);
+          btn.textContent = "× Error";
+        } finally {
+          setTimeout(() => {
+            btn.textContent = "↻ Refresh All";
+            btn.disabled = false;
+          }, 1500);
+        }
+      },
+      "Refresh all saved tickets from JIRA"
+    );
+
+    // Menu item: Push Tickets (direct call, detailed results)
+    addMenuItem(
+      "📤🌐 Push Tickets",
+      async (btn) => {
+        try {
+          btn.disabled = true;
+          btn.textContent = "Pushing...";
+          const results = await pushTicketUpdates();
+          if (
+            results.totalUpdates === 0 &&
+            results.totalCreated === 0 &&
+            results.unmappedStatuses === 0
+          ) {
+            btn.textContent = "✓ No updates";
+          } else {
+            let summary = [];
+            if (results.successfulUpdates > 0 || results.totalUpdates > 0) {
+              summary.push(
+                `Updated ${results.successfulUpdates}/${results.totalUpdates}`
+              );
+            }
+            if (results.successfulCreations > 0) {
+              summary.push(`Created ${results.successfulCreations}`);
+            }
+            if (results.unmappedStatuses > 0) {
+              summary.push(`Skipped ${results.unmappedStatuses}`);
+            }
+            btn.textContent = `✓ ${summary.join(", ")}`;
+            console.log("Push results:", results.details);
+            if (results.totalFailed > 0) {
+              console.error("Failed operations:", results.details.failed);
+              alert(
+                `Failed ${results.totalFailed} operations. Check console for details.`
+              );
+            }
+          }
+        } catch (e) {
+          console.error("Error pushing tickets:", e);
+          btn.textContent = "× Error";
+        } finally {
+          setTimeout(() => {
+            btn.textContent = "📤🌐 Push Tickets";
+            btn.disabled = false;
+          }, 1500);
+        }
+      },
+      "Push updates for saved tickets directly to AGT (no refresh, no lock)"
+    );
+
+    moreWrapper.appendChild(moreBtn);
+    moreWrapper.appendChild(menu);
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      menu.style.display = menu.style.display === "none" ? "block" : "none";
+    };
+    document.addEventListener("click", () => (menu.style.display = "none"));
+
     buttonsContainer.appendChild(syncButton);
     buttonsContainer.appendChild(pushButton);
     buttonsContainer.appendChild(addButton);
+    buttonsContainer.appendChild(autoToggleWrapper);
+    buttonsContainer.appendChild(moreWrapper);
 
     header.appendChild(title);
     header.appendChild(buttonsContainer);
@@ -1209,6 +1317,84 @@
     refreshTicketsList(ticketsList);
 
     return container;
+  }
+
+  // Extracted: refresh all saved tickets
+  async function refreshAllSavedTickets() {
+    if (!settings.savedTickets || settings.savedTickets.length === 0) return [];
+    const ticketsToRefresh = [...settings.savedTickets];
+    const refreshedTickets = [];
+    for (const ticket of ticketsToRefresh) {
+      try {
+        const refreshedTicket = await addTicket(ticket.id);
+        refreshedTickets.push(refreshedTicket);
+      } catch (error) {
+        // Keep original on failure
+        refreshedTickets.push(ticket);
+      }
+    }
+    settings.savedTickets = refreshedTickets;
+    saveSettings(settings);
+    return refreshedTickets;
+  }
+
+  // Auto sync orchestrator
+  let pendingSyncTimer = null;
+  let heartbeatTimer = null;
+  async function runDailySyncIfNeeded(reason) {
+    try {
+      if (!settings?.autoSyncEnabled) return;
+      if (!settings?.savedTickets || settings.savedTickets.length === 0) return;
+      const state = readAutoState();
+      const now = Date.now();
+      const due = !state.lastSyncAt || now - state.lastSyncAt >= DAY_MS;
+      if (!due && reason !== "immediate") return;
+
+      const lock = tryAcquireSyncLock();
+      if (!lock) return;
+      // Heartbeat renew
+      heartbeatTimer = setInterval(lock.renew, SYNC_HEARTBEAT_MS);
+      try {
+        await refreshAllSavedTickets();
+        // Push only if apiKey present
+        if (settings.apiKey) {
+          await pushTicketUpdates();
+        }
+        const updated = readAutoState();
+        writeAutoState({ ...updated, lastSyncAt: Date.now() });
+      } finally {
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+        }
+        lock.release();
+      }
+    } catch (e) {
+      // swallow errors to avoid disrupting UI
+      console.error("Auto sync failed:", e);
+    }
+  }
+
+  function triggerSyncSoon(delayMs = 0) {
+    if (pendingSyncTimer) {
+      clearTimeout(pendingSyncTimer);
+      pendingSyncTimer = null;
+    }
+    pendingSyncTimer = setTimeout(
+      () => runDailySyncIfNeeded("immediate"),
+      delayMs
+    );
+  }
+
+  function scheduleAutoChecks() {
+    // defer first check by 30s
+    setTimeout(() => {
+      runDailySyncIfNeeded("interval");
+      setInterval(
+        () => runDailySyncIfNeeded("interval"),
+        SYNC_CHECK_INTERVAL_MS
+      );
+    }, INITIAL_SYNC_DEFER_MS);
   }
 
   // Add this function to create the add ticket button
@@ -1440,6 +1626,10 @@
       settings.AgtProjectNameMapping || DEFAULT_SETTINGS.AgtProjectNameMapping;
     settings.currentUser = settings.currentUser || DEFAULT_SETTINGS.currentUser;
     settings.teamName = settings.teamName || DEFAULT_SETTINGS.teamName;
+    settings.autoSyncEnabled =
+      typeof settings.autoSyncEnabled === "boolean"
+        ? settings.autoSyncEnabled
+        : true;
 
     // Migration: Add "blocked" array to existing board configurations
     if (settings.boardConfigs) {
@@ -2713,6 +2903,7 @@
     try {
       settings = await loadSettings();
       setupPageChangeObserver();
+      scheduleAutoChecks();
     } catch (error) {
       console.error("Failed to initialize JIRA Settings:", error);
     }
