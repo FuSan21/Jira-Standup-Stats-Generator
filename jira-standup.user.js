@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.4.0
+// @version      0.4.1
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -1085,14 +1085,14 @@
         await runDailySyncIfNeeded("immediate");
         pushButton.textContent = "✓ Sync triggered";
         setTimeout(() => {
-          pushButton.textContent = "📤🌐 Push Tickets";
+          pushButton.textContent = "🔄📤 Refresh and Push Tickets";
           pushButton.disabled = false;
         }, 2000);
       } catch (error) {
         console.error("Error triggering sync:", error);
         pushButton.textContent = "× Error";
         setTimeout(() => {
-          pushButton.textContent = "📤🌐 Push Tickets";
+          pushButton.textContent = "🔄📤 Refresh and Push Tickets";
           pushButton.disabled = false;
         }, 2000);
       }
