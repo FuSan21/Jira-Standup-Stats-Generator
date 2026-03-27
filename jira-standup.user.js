@@ -50,7 +50,7 @@
       type: "status",
       getTicketId: (container) => {
         const breadcrumb = document.querySelector(
-          INJECTION_POINTS.TICKET_DETAILS.breadcrumbSelector
+          INJECTION_POINTS.TICKET_DETAILS.breadcrumbSelector,
         );
         if (!breadcrumb) return null;
 
@@ -176,7 +176,7 @@
           try {
             if (response.status !== 200)
               throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`
+                `HTTP ${response.status}: ${response.statusText}`,
               );
 
             const data = JSON.parse(response.responseText);
@@ -240,7 +240,7 @@
 
             console.log(
               `[Board ${boardId}] Checking estimation configuration:`,
-              data.estimation
+              data.estimation,
             );
 
             // Only set story points field if it doesn't exist or is empty
@@ -264,13 +264,13 @@
                 saveSettings(settings);
               } else {
                 console.log(
-                  `[Board ${boardId}] No story points field found in estimation config`
+                  `[Board ${boardId}] No story points field found in estimation config`,
                 );
               }
             } else {
               console.log(
                 `[Board ${boardId}] Using existing story points field:`,
-                settings.storyPointsFields[boardId]
+                settings.storyPointsFields[boardId],
               );
             }
 
@@ -288,7 +288,7 @@
   async function fetchIncompleteTickets() {
     const today = new Date();
     const estDate = new Date(
-      today.toLocaleString("en-US", { timeZone: "America/New_York" })
+      today.toLocaleString("en-US", { timeZone: "America/New_York" }),
     );
     const dateStr = estDate.toISOString().split("T")[0];
 
@@ -307,7 +307,7 @@
               resolve(data);
             } else {
               reject(
-                new Error(`HTTP ${response.status}: ${response.statusText}`)
+                new Error(`HTTP ${response.status}: ${response.statusText}`),
               );
             }
           } catch (error) {
@@ -359,7 +359,7 @@
 
     // Only return merged config if it has any statuses
     const hasStatuses = Object.values(mergedConfig).some(
-      (arr) => arr.length > 0
+      (arr) => arr.length > 0,
     );
     return hasStatuses ? mergedConfig : null;
   }
@@ -410,7 +410,7 @@
             resolve(JSON.parse(response.responseText));
           } else {
             reject(
-              new Error(`HTTP ${response.status}: ${response.statusText}`)
+              new Error(`HTTP ${response.status}: ${response.statusText}`),
             );
           }
         },
@@ -424,7 +424,7 @@
       GM_xmlhttpRequest({
         method: "GET",
         url: `https://allgentech.io/api/employee/tickets/check-duplicate?ticketName=${encodeURIComponent(
-          ticketName
+          ticketName,
         )}`,
         headers: {
           Accept: "application/json",
@@ -437,7 +437,7 @@
               resolve(data.duplicate);
             } else {
               reject(
-                new Error(`HTTP ${response.status}: ${response.statusText}`)
+                new Error(`HTTP ${response.status}: ${response.statusText}`),
               );
             }
           } catch (error) {
@@ -466,7 +466,7 @@
               resolve(data);
             } else {
               reject(
-                new Error(`HTTP ${response.status}: ${response.statusText}`)
+                new Error(`HTTP ${response.status}: ${response.statusText}`),
               );
             }
           } catch (error) {
@@ -488,7 +488,7 @@
       // Create maps for easy lookup
       const fetchedTicketsMap = new Map(fetchedTickets.map((t) => [t.name, t]));
       const savedTicketsMap = new Map(
-        settings.savedTickets.map((t) => [t.id, t])
+        settings.savedTickets.map((t) => [t.id, t]),
       );
 
       // Find tickets that need updating
@@ -564,7 +564,7 @@
           ticketsToCreate.length
         } tickets to create, and ${
           unmappedStatusTickets.length + unmappedNewTickets.length
-        } tickets with unmapped statuses`
+        } tickets with unmapped statuses`,
       );
 
       // Process updates sequentially
@@ -596,7 +596,7 @@
 
           const today = new Date();
           const estDate = new Date(
-            today.toLocaleString("en-US", { timeZone: "America/New_York" })
+            today.toLocaleString("en-US", { timeZone: "America/New_York" }),
           );
           const dateStr = estDate.toISOString().split("T")[0];
 
@@ -611,10 +611,10 @@
           };
 
           console.log(
-            `Updating ticket ${update.fetchedId} status to: ${updateData.status}`
+            `Updating ticket ${update.fetchedId} status to: ${updateData.status}`,
           );
           console.log(
-            `Project mapping: ${update.savedTicket.projectName} → ${mappedProjectName}`
+            `Project mapping: ${update.savedTicket.projectName} → ${mappedProjectName}`,
           );
 
           const result = await updateTicketStatus(update.fetchedId, updateData);
@@ -625,7 +625,7 @@
             updateData.status === "Cancelled"
           ) {
             console.log(
-              `Marking ticket ${update.savedTicket.id} with status "${updateData.status}" for removal`
+              `Marking ticket ${update.savedTicket.id} with status "${updateData.status}" for removal`,
             );
             completedTicketIds.push(update.savedTicket.id);
           }
@@ -641,7 +641,7 @@
         } catch (error) {
           console.error(
             `Failed to update ticket ${update.savedTicket.id}:`,
-            error
+            error,
           );
           results.failed.push({
             ticketId: update.savedTicket.id,
@@ -659,7 +659,7 @@
           const isDuplicate = await checkDuplicateTicket(ticket.id);
           if (isDuplicate) {
             console.log(
-              `Ticket ${ticket.id} already exists in AGT system, skipping creation`
+              `Ticket ${ticket.id} already exists in AGT system, skipping creation`,
             );
             continue;
           }
@@ -671,7 +671,7 @@
 
           const today = new Date();
           const estDate = new Date(
-            today.toLocaleString("en-US", { timeZone: "America/New_York" })
+            today.toLocaleString("en-US", { timeZone: "America/New_York" }),
           );
           const dateStr = estDate.toISOString().split("T")[0];
 
@@ -686,7 +686,7 @@
           // Skip if status couldn't be mapped (this should never happen as we filter these out earlier)
           if (mappedStatus === null) {
             console.log(
-              `Skipping ticket ${ticket.id} with unmapped status "${ticket.status}"`
+              `Skipping ticket ${ticket.id} with unmapped status "${ticket.status}"`,
             );
             results.failed.push({
               ticketId: ticket.id,
@@ -719,7 +719,7 @@
           // If the ticket is created with "Done" or "Cancelled" status, track for removal
           if (mappedStatus === "Done" || mappedStatus === "Cancelled") {
             console.log(
-              `New ticket ${ticket.id} with status "${mappedStatus}" marked for removal`
+              `New ticket ${ticket.id} with status "${mappedStatus}" marked for removal`,
             );
             completedTicketIds.push(ticket.id);
           }
@@ -747,12 +747,12 @@
       if (completedTicketIds.length > 0) {
         console.log(
           `Removing ${completedTicketIds.length} completed tickets:`,
-          completedTicketIds
+          completedTicketIds,
         );
 
         // Filter out the completed tickets
         settings.savedTickets = settings.savedTickets.filter(
-          (ticket) => !completedTicketIds.includes(ticket.id)
+          (ticket) => !completedTicketIds.includes(ticket.id),
         );
 
         // Save settings immediately
@@ -763,7 +763,7 @@
         if (ticketsModal) {
           // Find the tickets list container
           const ticketsList = ticketsModal.querySelector(
-            "div[style*='overflow-y: auto']"
+            "div[style*='overflow-y: auto']",
           );
           if (ticketsList) {
             // We need to recreate the refreshTicketsList function since it's defined locally in createTicketsUI
@@ -784,8 +784,8 @@
                   <div><strong>${ticket.id}</strong> - ${ticket.name}</div>
                   <div style="font-size: 12px; color: var(--ds-text-subtlest,#626f86);">
                     ${ticket.projectName} • ${ticket.ticketType} • ${
-                  ticket.status
-                } 
+                      ticket.status
+                    } 
                     ${
                       ticket.storyPoints ? `• ${ticket.storyPoints} points` : ""
                     }
@@ -873,8 +873,8 @@
       // Check if the status exists in any category (case-insensitive)
       return Object.values(boardConfig).some((statuses) =>
         statuses.some(
-          (status) => status.toLowerCase() === currentStatus.toLowerCase()
-        )
+          (status) => status.toLowerCase() === currentStatus.toLowerCase(),
+        ),
       );
     });
 
@@ -921,7 +921,7 @@
               resolve(JSON.parse(response.responseText));
             } else {
               reject(
-                new Error(`HTTP ${response.status}: ${response.statusText}`)
+                new Error(`HTTP ${response.status}: ${response.statusText}`),
               );
             }
           },
@@ -955,7 +955,7 @@
   // Function to remove ticket
   function removeTicket(ticketId) {
     settings.savedTickets = settings.savedTickets.filter(
-      (t) => t.id !== ticketId
+      (t) => t.id !== ticketId,
     );
     saveSettings(settings);
   }
@@ -1192,7 +1192,7 @@
           }, 1500);
         }
       },
-      "Refresh all saved tickets from JIRA"
+      "Refresh all saved tickets from JIRA",
     );
 
     // Menu item: Push Tickets (direct call, detailed results)
@@ -1213,7 +1213,7 @@
             let summary = [];
             if (results.successfulUpdates > 0 || results.totalUpdates > 0) {
               summary.push(
-                `Updated ${results.successfulUpdates}/${results.totalUpdates}`
+                `Updated ${results.successfulUpdates}/${results.totalUpdates}`,
               );
             }
             if (results.successfulCreations > 0) {
@@ -1227,7 +1227,7 @@
             if (results.totalFailed > 0) {
               console.error("Failed operations:", results.details.failed);
               alert(
-                `Failed ${results.totalFailed} operations. Check console for details.`
+                `Failed ${results.totalFailed} operations. Check console for details.`,
               );
             }
           }
@@ -1241,7 +1241,7 @@
           }, 1500);
         }
       },
-      "Push updates for saved tickets directly to AGT (no refresh, no lock)"
+      "Push updates for saved tickets directly to AGT (no refresh, no lock)",
     );
 
     moreWrapper.appendChild(moreBtn);
@@ -1382,7 +1382,7 @@
     }
     pendingSyncTimer = setTimeout(
       () => runDailySyncIfNeeded("immediate"),
-      delayMs
+      delayMs,
     );
   }
 
@@ -1392,7 +1392,7 @@
       runDailySyncIfNeeded("interval");
       setInterval(
         () => runDailySyncIfNeeded("interval"),
-        SYNC_CHECK_INTERVAL_MS
+        SYNC_CHECK_INTERVAL_MS,
       );
     }, INITIAL_SYNC_DEFER_MS);
   }
@@ -1404,7 +1404,7 @@
 
     // Check if ticket is already saved
     const isAlreadySaved = settings.savedTickets?.some(
-      (t) => t.id === ticketId
+      (t) => t.id === ticketId,
     );
 
     button.style.cssText = `
@@ -1488,12 +1488,12 @@
   // Update injectIntoTicketDetails function to use new getTicketId
   function injectIntoTicketDetails() {
     const container = document.querySelector(
-      INJECTION_POINTS.TICKET_DETAILS.containerSelector
+      INJECTION_POINTS.TICKET_DETAILS.containerSelector,
     );
     if (!container) return;
 
     const target = document.querySelector(
-      INJECTION_POINTS.TICKET_DETAILS.targetSelector
+      INJECTION_POINTS.TICKET_DETAILS.targetSelector,
     );
     if (!target) return;
 
@@ -1539,7 +1539,7 @@
     `;
 
     const isAlreadySaved = settings.savedTickets?.some(
-      (t) => t.id === ticketId
+      (t) => t.id === ticketId,
     );
 
     if (isAlreadySaved) {
@@ -1585,7 +1585,7 @@
   function injectAddTicketButtons() {
     // Handle Your Work tabs
     const yourWorkTabs = document.querySelectorAll(
-      INJECTION_POINTS.YOUR_WORK_TABS.selector
+      INJECTION_POINTS.YOUR_WORK_TABS.selector,
     );
 
     yourWorkTabs.forEach((tab) => {
@@ -1988,7 +1988,7 @@
             border-bottom: 2px solid #ddd;
         `;
         headerRow.appendChild(th);
-      }
+      },
     );
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -2004,7 +2004,7 @@
     // Group boards by project
     const projectBoards = {};
     for (const [boardName, projectName] of Object.entries(
-      settings.boardToProjectMap
+      settings.boardToProjectMap,
     )) {
       if (!projectBoards[projectName]) {
         projectBoards[projectName] = [];
@@ -2150,7 +2150,7 @@
     checkbox.type = "checkbox";
     checkbox.style.marginRight = "8px";
     checkbox.checked = settings.savedBoards.some(
-      (saved) => saved.id === board.id
+      (saved) => saved.id === board.id,
     );
 
     const name = document.createElement("span");
@@ -2169,7 +2169,7 @@
         });
       } else {
         settings.savedBoards = settings.savedBoards.filter(
-          (saved) => saved.id !== board.id
+          (saved) => saved.id !== board.id,
         );
       }
     };
@@ -2206,7 +2206,7 @@
         }
 
         document.body.appendChild(
-          createColumnConfigModal(board, config.columnConfig.columns)
+          createColumnConfigModal(board, config.columnConfig.columns),
         );
       } catch (error) {
         alert(`Failed to load board configuration: ${error.message}`);
@@ -2471,7 +2471,7 @@
         category,
         columns,
         config,
-        updateAvailableColumns
+        updateAvailableColumns,
       );
       modal.appendChild(section);
     });
@@ -2489,7 +2489,7 @@
     category,
     allColumns,
     config,
-    updateAvailableColumns
+    updateAvailableColumns,
   ) {
     const section = document.createElement("div");
     section.style.cssText = `
@@ -2537,8 +2537,8 @@
           columnName,
           category.key,
           config,
-          updateAvailableColumns
-        )
+          updateAvailableColumns,
+        ),
       );
     });
 
@@ -2549,7 +2549,7 @@
       });
 
       const availableColumns = allColumns.filter(
-        (col) => !allSelectedColumns.has(col.name)
+        (col) => !allSelectedColumns.has(col.name),
       );
 
       const modal = createColumnSelectionModal(
@@ -2564,14 +2564,14 @@
                   col,
                   category.key,
                   config,
-                  updateAvailableColumns
-                )
+                  updateAvailableColumns,
+                ),
               );
             }
           });
           // Update available columns after adding new ones
           updateAvailableColumns();
-        }
+        },
       );
       document.body.appendChild(modal);
     };
@@ -2588,7 +2588,7 @@
     columnName,
     category,
     config,
-    updateAvailableColumns
+    updateAvailableColumns,
   ) {
     const item = document.createElement("div");
     item.style.cssText = `
@@ -2752,8 +2752,8 @@
     saveButton.onclick = () => {
       const selected = Array.from(
         modal.querySelectorAll(
-          'input[type="checkbox"]:checked:not(#custom-column)'
-        )
+          'input[type="checkbox"]:checked:not(#custom-column)',
+        ),
       ).map((cb) => cb.value);
 
       if (customCheckbox.checked && customInput.value.trim()) {
@@ -2813,7 +2813,7 @@
     saveButton.onclick = () => {
       settings.boardConfigs[boardId] = config;
       const storyPointsInput = modal.querySelector(
-        `#story-points-field-${boardId}`
+        `#story-points-field-${boardId}`,
       );
       if (storyPointsInput) {
         settings.storyPointsFields[boardId] =
@@ -2845,10 +2845,10 @@
   // New helper function to handle button injection
   function injectSettingsButton() {
     const actionsList = document.querySelector(
-      'nav[aria-label="Actions"] div[role="list"]'
+      'nav[aria-label="Actions"] div[role="list"]',
     );
     const existingButton = actionsList?.querySelector(
-      'div[role="listitem"] button[aria-label="Tickets"]'
+      'div[role="listitem"] button[aria-label="Tickets"]',
     );
 
     if (actionsList && !existingButton) {
