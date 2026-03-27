@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.4.1
+// @version      0.4.2
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -904,6 +904,7 @@
   // Function to fetch and add ticket
   async function addTicket(ticketId) {
     try {
+      settings = await loadSettings();
       const response = await new Promise((resolve, reject) => {
         GM_xmlhttpRequest({
           method: "GET",
