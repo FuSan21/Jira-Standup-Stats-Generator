@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.4.2
+// @version      0.5.0
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://auxosolutions.atlassian.net/*
@@ -2900,11 +2900,27 @@
     });
   }
 
+  function setupSettingsStorageSync() {
+    window.addEventListener("storage", (event) => {
+      if (event.storageArea !== localStorage) return;
+      if (event.key !== "jiraStandupSettings") return;
+
+      loadSettings()
+        .then((nextSettings) => {
+          settings = nextSettings;
+        })
+        .catch((err) =>
+          console.error("Failed to sync settings from storage event:", err),
+        );
+    });
+  }
+
   async function start() {
     try {
       settings = await loadSettings();
       setupPageChangeObserver();
       scheduleAutoChecks();
+      setupSettingsStorageSync();
     } catch (error) {
       console.error("Failed to initialize JIRA Settings:", error);
     }
