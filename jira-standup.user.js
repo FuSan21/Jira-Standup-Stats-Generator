@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.5.2
+// @version      0.5.3
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://alphafmc.atlassian.net/*
@@ -55,6 +55,22 @@
         if (!breadcrumb) return null;
 
         const matches = breadcrumb.href.match(/\/browse\/([A-Z]+-\d+)/);
+        return matches ? matches[1] : null;
+      },
+    },
+    /** Issue Navigator / Plans native list view (`table[data-vc="issue-table"]`). */
+    NATIVE_ISSUE_TABLE: {
+      tableSelector: 'table[data-vc="issue-table"]',
+      rowSelector: 'tr[data-vc="issue-row"]',
+      issueKeyLinkSelector:
+        '[data-testid="native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell"]',
+      buttonWrapperClass: "jira-standup-native-issue-table-btn",
+      getTicketId: (row) => {
+        const link = row.querySelector(
+          INJECTION_POINTS.NATIVE_ISSUE_TABLE.issueKeyLinkSelector,
+        );
+        if (!link?.href) return null;
+        const matches = link.href.match(/\/browse\/([A-Z]+-\d+)/);
         return matches ? matches[1] : null;
       },
     },
@@ -1457,6 +1473,32 @@
     return button;
   }
 
+  function injectIntoNativeIssueTable() {
+    const cfg = INJECTION_POINTS.NATIVE_ISSUE_TABLE;
+    const tables = document.querySelectorAll(cfg.tableSelector);
+
+    tables.forEach((table) => {
+      const rows = table.querySelectorAll(cfg.rowSelector);
+      rows.forEach((row) => {
+        if (row.querySelector(`.${cfg.buttonWrapperClass}`)) return;
+
+        const ticketId = cfg.getTicketId(row);
+        if (!ticketId) return;
+
+        const issueKeyLink = row.querySelector(cfg.issueKeyLinkSelector);
+        if (!issueKeyLink) return;
+
+        const wrap = document.createElement("div");
+        wrap.className = cfg.buttonWrapperClass;
+        wrap.style.cssText =
+          "display:block;margin-top:4px;width:max-content;max-width:100%;";
+        wrap.appendChild(createAddTicketButton(ticketId));
+
+        issueKeyLink.insertAdjacentElement("afterend", wrap);
+      });
+    });
+  }
+
   // Modify the injectIntoList function to handle multiple ULs
   function injectIntoList(container) {
     // Find all UL elements within the container
@@ -1604,6 +1646,9 @@
 
     // Handle Ticket Details page
     injectIntoTicketDetails();
+
+    // Native issue table (list views / navigator)
+    injectIntoNativeIssueTable();
   }
 
   // Settings Management
