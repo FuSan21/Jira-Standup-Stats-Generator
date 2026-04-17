@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.5.1
+// @version      0.5.2
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
 // @match        https://alphafmc.atlassian.net/*
@@ -163,7 +163,7 @@
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: "GET",
-        url: "https://auxosolutions.atlassian.net/rest/agile/1.0/board",
+        url: "https://alphafmc.atlassian.net/rest/agile/1.0/board",
         headers: {
           Accept: "application/json",
           "X-Requested-With": "XMLHttpRequest",
@@ -211,7 +211,7 @@
   async function fetchBoardConfig(boardId) {
     if (!boardId) throw new Error("Board ID is required");
 
-    const url = `https://auxosolutions.atlassian.net/rest/agile/1.0/board/${boardId}/configuration`;
+    const url = `https://alphafmc.atlassian.net/rest/agile/1.0/board/${boardId}/configuration`;
 
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -908,7 +908,7 @@
       const response = await new Promise((resolve, reject) => {
         GM_xmlhttpRequest({
           method: "GET",
-          url: `https://auxosolutions.atlassian.net/rest/api/3/issue/${ticketId}`,
+          url: `https://alphafmc.atlassian.net/rest/api/3/issue/${ticketId}`,
           headers: {
             Accept: "application/json",
             "X-Requested-With": "XMLHttpRequest",
