@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         JIRA Stand Up
 // @namespace    https://www.fusan.live
-// @version      0.5.0
+// @version      0.5.1
 // @description  Intrigate Stand Up with JIRA
 // @author       Md Fuad Hasan
-// @match        https://auxosolutions.atlassian.net/*
+// @match        https://alphafmc.atlassian.net/*
 // @connect      allgentech.io
-// @connect      auxosolutions.atlassian.net
+// @connect      alphafmc.atlassian.net
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-standup.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-standup.user.js

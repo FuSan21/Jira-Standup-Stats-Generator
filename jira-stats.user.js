@@ -4,7 +4,7 @@
 // @version      0.8.4
 // @description  Show JIRA statistics
 // @author       Md Fuad Hasan
-// @match        https://auxosolutions.atlassian.net/*
+// @match        https://alphafmc.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
 // @downloadURL  https://raw.githubusercontent.com/FuSan21/Jira-Standup-Stats-Generator/refs/heads/main/jira-stats.user.js
@@ -182,7 +182,7 @@
 
       const settingsContainer = container.parentElement;
       const gearIcon = settingsContainer.parentElement.querySelector(
-        'button[title="Settings"]'
+        'button[title="Settings"]',
       );
 
       setTimeout(() => {
@@ -565,7 +565,7 @@
           try {
             if (response.status !== 200) {
               throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`
+                `HTTP ${response.status}: ${response.statusText}`,
               );
             }
             resolve(JSON.parse(response.responseText));
@@ -588,7 +588,7 @@
   function getWeekBoundaries(weekType) {
     const userTimezone = settings.timezone || "America/New_York";
     const now = new Date(
-      new Date().toLocaleString("en-US", { timeZone: userTimezone })
+      new Date().toLocaleString("en-US", { timeZone: userTimezone }),
     );
     const currentDay = now.getDay();
 
@@ -627,7 +627,7 @@
   function processTicketInfo(item, stats, weekType, weekBoundaries, changelog) {
     const type = item.getElementsByTagName("type")[0].textContent;
     const created = new Date(
-      item.getElementsByTagName("created")[0].textContent
+      item.getElementsByTagName("created")[0].textContent,
     );
     const summary = item.getElementsByTagName("summary")[0].textContent;
     const priority = item.getElementsByTagName("priority")[0].textContent;
@@ -654,13 +654,13 @@
         change.items.some(
           (item) =>
             item.field === "assignee" &&
-            item.toString === settings.currentJiraUser
-        )
+            item.toString === settings.currentJiraUser,
+        ),
       );
 
       if (assignmentChange) {
         const assignmentDate = new Date(
-          convertToUserTimezone(assignmentChange.created)
+          convertToUserTimezone(assignmentChange.created),
         );
         console.log(
           `Assignment details for ${
@@ -673,19 +673,19 @@
             beforeWeekStart: assignmentDate < weekBoundaries.start,
             beforeWeekEnd: assignmentDate < weekBoundaries.end,
             timezone: settings.timezone,
-          }
+          },
         );
 
         if (assignmentDate < weekBoundaries.start) {
           console.log(
             `${
               item.getElementsByTagName("key")[0].textContent
-            } is a carryover ticket`
+            } is a carryover ticket`,
           );
           stats.carryover++;
         } else if (assignmentDate < weekBoundaries.end) {
           console.log(
-            `${item.getElementsByTagName("key")[0].textContent} is a new ticket`
+            `${item.getElementsByTagName("key")[0].textContent} is a new ticket`,
           );
           stats.newTickets++;
         }
@@ -760,7 +760,7 @@
 
         if (!validStatusChange) {
           console.log(
-            `${key}: No valid status change by ${settings.currentJiraUser} found`
+            `${key}: No valid status change by ${settings.currentJiraUser} found`,
           );
           continue;
         }
@@ -825,7 +825,7 @@
                         t.type
                       }) [${t.priority}] - ${t.status}${
                         t.points ? ` [${t.points}pts]` : ""
-                      }</li>`
+                      }</li>`,
                   )
                   .join("")}
             </ul>
@@ -915,7 +915,7 @@
         console.error("Network error:", error);
         showError(
           statsBox,
-          "Failed to fetch data. Please check your connection."
+          "Failed to fetch data. Please check your connection.",
         );
       },
     });
@@ -967,7 +967,7 @@
     console.log("Statistics: Attempting to inject button");
     // Find the secondary actions list using the new structure
     const actionsList = document.querySelector(
-      'nav[aria-label="Actions"] div[role="list"]'
+      'nav[aria-label="Actions"] div[role="list"]',
     );
     if (!actionsList) {
       console.error("Statistics: Could not find secondary actions list");
@@ -1032,7 +1032,7 @@
 
       // Check if we need to reinject the button
       const actionsList = document.querySelector(
-        'nav[aria-label="Actions"] div[role="list"]'
+        'nav[aria-label="Actions"] div[role="list"]',
       );
       if (
         actionsList &&
@@ -1174,7 +1174,7 @@
     }
 
     const baseQuery = `assignee WAS currentUser() AND status changed TO ("${statusList.join(
-      '", "'
+      '", "',
     )}")`;
     const notInProgress =
       ' AND status NOT IN ("' + settings.inProgress.join('", "') + '")';
@@ -1225,7 +1225,7 @@
         console.error("Network error:", error);
         showError(
           statsBox,
-          "Failed to fetch data. Please check your connection."
+          "Failed to fetch data. Please check your connection.",
         );
       },
     });
@@ -1249,7 +1249,7 @@
           try {
             if (response.status !== 200) {
               throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`
+                `HTTP ${response.status}: ${response.statusText}`,
               );
             }
             const data = JSON.parse(response.responseText);
